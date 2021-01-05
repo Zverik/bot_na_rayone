@@ -1,0 +1,12 @@
+map/
+backup/
+*.swp
+*.sqlite
+*.log
+config/config.yml
+config/responses.yml
+config/addr.yml
+photo/
+tiles/
+Pipfile*
+__pycache__/
