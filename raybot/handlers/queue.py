@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, get_map, get_user
+from raybot.util import h, HTML, get_user
 from raybot.actions.poi import print_poi, POI_EDIT_CB
 from typing import Dict
 from aiogram import types
@@ -28,18 +28,18 @@ async def print_next_queued(user: types.User):
     queue = await db.get_queue(1)
     if not queue:
         await bot.send_message(user.id, config.MSG['queue']['empty'])
-        return
+        return True
 
     q = queue[0]
     poi = await db.get_poi_by_id(q.poi_id)
     if not poi:
         await bot.send_message('POI пропал, странно. Удаляю запись.')
         await db.delete_queue(q)
-        return
+        return True
 
     if q.field == 'message':
-        content = config.MSG['queue']['field'].format(
-            user=h(q.user_name), name=h(poi.name), field=q.field)
+        content = config.MSG['queue']['message'].format(
+            user=h(q.user_name), name=h(poi.name))
         content += f'\n\n{h(q.new_value)}'
     else:
         content = config.MSG['queue']['field'].format(
@@ -98,23 +98,3 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
         await query.answer(f'Что за действие в queue, "{action}"?')
 
     await print_next_queued(query.from_user)
-
-
-@dp.message_handler(commands='last', state='*')
-async def print_last(message: types.Message, state: FSMContext):
-    lines = []
-    pois = await db.get_last_poi(7)
-    map_file = get_map([poi.location for poi in pois])
-    for i, poi in enumerate(pois, 1):
-        line = f'{i}. /poi{poi.id} <b>{h(poi.name)}</b>'
-        if poi.description:
-            line += f' — {h(poi.description)}'
-        lines.append(line)
-    content = '\n'.join(lines)
-    if map_file:
-        await message.answer_photo(
-            types.InputFile(map_file.name),
-            caption=content, parse_mode=HTML)
-        map_file.close()
-    else:
-        await message.answer(content, parse_mode=HTML)

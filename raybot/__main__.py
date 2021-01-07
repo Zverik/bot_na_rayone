@@ -1,6 +1,6 @@
 from raybot.model import db
 from raybot.bot import dp
-from raybot.cli import geojson, buildings, photos, test_map
+from raybot.cli import geojson, buildings, photos, test_map, reindex, duplicates
 import raybot.handlers  # noqa
 import logging
 import sys
@@ -27,6 +27,10 @@ if __name__ == '__main__':
             photos.run()
         elif cmd == 'map':
             test_map.run()
+        elif cmd == 'index':
+            reindex.run()
+        elif cmd == 'dedup':
+            duplicates.run()
         else:
             print('Supported commands:')
             print()
@@ -35,3 +39,5 @@ if __name__ == '__main__':
             print('buildings — print missing building photos and entrance info')
             print('photos — print missing and stray photos')
             print('map — generate a map image')
+            print('index — regenerate full-text search index')
+            print('dedup — deduplicate uploaded photos for POI')

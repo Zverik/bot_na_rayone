@@ -39,9 +39,12 @@ async def test_address(message: types.Message, tokens: List[str], state: FSMCont
 
 async def print_street(message, street):
     buildings = street['buildings']
-    kbd = types.InlineKeyboardMarkup(row_width=5 if 1 <= len(buildings) % 6 <= 2 else 6)
-    for house, hid in buildings.items():
-        kbd.insert(types.InlineKeyboardButton(house, callback_data=HOUSE_CB.new(id=hid)))
+    if len(buildings) > 30:
+        kbd = None
+    else:
+        kbd = types.InlineKeyboardMarkup(row_width=5 if 1 <= len(buildings) % 6 <= 2 else 6)
+        for house, hid in buildings.items():
+            kbd.insert(types.InlineKeyboardButton(house, callback_data=HOUSE_CB.new(id=hid)))
     await message.answer(f"Выберите дом по {street['name']}:", reply_markup=kbd)
 
 

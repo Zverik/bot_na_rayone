@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, Location
 from raybot.bot import dp, bot
-from raybot.util import split_tokens, has_keyword, get_user, HTML, get_buttons, prune_users
+from raybot.util import split_tokens, has_keyword, get_user, h, HTML, get_buttons, prune_users
 from raybot.actions.addr import test_address
 from raybot.actions.poi import PoiState, print_poi, print_poi_list
 from raybot.actions.messages import process_reply
@@ -17,6 +17,16 @@ from aiogram.dispatcher import FSMContext
 async def welcome(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer(config.MSG['start'], reply_markup=get_buttons())
+
+
+@dp.message_handler(commands=['help'], state='*')
+async def help(message: types.Message, state: FSMContext):
+    await state.finish()
+    msg = config.MSG['help']
+    stats = await db.get_stats()
+    for k, v in stats.items():
+        msg = msg.replace('{' + k + '}', h(str(v)))
+    await message.answer(msg, reply_markup=get_buttons())
 
 
 def write_search_log(message, tokens, result):
@@ -39,9 +49,9 @@ async def process(message: types.Message, state: FSMContext):
         return
     for user_id in prune_users(message.from_user.id):
         await state.storage.finish(user=user_id)
-        await bot.send_message(user_id, config.MSG['home'], disable_notification=True,
-                               reply_markup=get_buttons())
-        await sleep(0.3)
+        # await bot.send_message(user_id, config.MSG['home'], disable_notification=True,
+        #                        reply_markup=get_buttons())
+        # await sleep(0.3)
 
     tokens = split_tokens(message.text)
     if not tokens:
@@ -74,8 +84,8 @@ async def process(message: types.Message, state: FSMContext):
     else:
         write_search_log(message, tokens, 'not found')
         new_kbd = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton('Сообщить модераторам', callback_data='missing_mod'),
-            types.InlineKeyboardButton('Добавить заведение', callback_data='new')
+            types.InlineKeyboardButton('💬 Сообщить модераторам', callback_data='missing_mod'),
+            types.InlineKeyboardButton('➕ Добавить заведение', callback_data='new')
         )
         await message.answer(config.MSG['not_found'].replace('%s', message.text),
                              reply_markup=new_kbd)

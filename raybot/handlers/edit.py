@@ -2,8 +2,8 @@ from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot, dp
 from raybot.util import h, HTML, split_tokens, get_buttons, get_map, get_user
-from raybot.actions.poi import POI_EDIT_CB
-from raybot.action.messages import broadcast_str
+from raybot.actions.poi import POI_EDIT_CB, POI_LIST_CB
+from raybot.actions.messages import broadcast_str, broadcast
 import re
 import os
 import random
@@ -46,6 +46,13 @@ def location_keyboard():
             url='https://zverik.github.io/latlon/#16/53.9312/27.6525'),
         types.InlineKeyboardButton(config.MSG['cancel'], callback_data='cancel'),
     )
+
+
+def valid_location(loc):
+    bbox = config.MSG.get('bbox')
+    if not bbox or len(bbox) != 4:
+        return True
+    return bbox[0] <= loc.lon <= bbox[2] and bbox[1] <= loc.lat <= bbox[3]
 
 
 @dp.callback_query_handler(state=EditState.all_states, text='cancel')
@@ -102,7 +109,12 @@ def parse_location(message: types.Message):
 async def new_location(message: types.Message, state: FSMContext):
     loc = parse_location(message)
     if not loc:
-        await message.answer(config.MSG['new_poi']['no_location'], reply_markup=location_keyboard())
+        await message.answer(config.MSG['new_poi']['no_location'],
+                             reply_markup=location_keyboard())
+        return
+    if not valid_location(loc):
+        await message.answer(config.MSG['new_poi']['location_out'],
+                             reply_markup=location_keyboard())
         return
     await state.update_data(lon=loc.lon, lat=loc.lat)
     await EditState.keywords.set()
@@ -247,13 +259,20 @@ async def show_photos(message: types.Message, state: FSMContext):
 
 @dp.message_handler(state=EditState.confirm, content_types=types.ContentType.PHOTO)
 async def upload_photo(message: types.Message, state: FSMContext):
-    f = await bot.get_file(message.photo[-1].file_id)
-    name = ''.join(random.sample(ascii_lowercase, 4)) + datetime.now().strftime('%y%m%d%H%M%S')
-    path = os.path.join(config.PHOTOS, name + '.jpg')
-    await f.download(path)
-    if not os.path.exists(path):
-        await message.answer(config.MSG['editor']['upload_fail'])
-        return
+    file_id = message.photo[-1].file_id
+    name = await db.find_path_for_file_id(file_id)
+    downloaded = False
+    if not name:
+        f = await bot.get_file(file_id)
+        name = (''.join(random.sample(ascii_lowercase, 4)) +
+                datetime.now().strftime('%y%m%d%H%M%S'))
+        path = os.path.join(config.PHOTOS, name + '.jpg')
+        await f.download(path)
+        if not os.path.exists(path):
+            await message.answer(config.MSG['editor']['upload_fail'])
+            return
+        await db.store_file_id(name, os.path.getsize(path), file_id)
+        downloaded = True
 
     kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton('Снаружи', callback_data=PHOTO_CB.new(
@@ -261,7 +280,7 @@ async def upload_photo(message: types.Message, state: FSMContext):
         types.InlineKeyboardButton('Изнутри', callback_data=PHOTO_CB.new(
             name=name, which='in')),
         types.InlineKeyboardButton('🗑️ Ой, удали', callback_data=PHOTO_CB.new(
-            name=name, which='del'))
+            name=name, which='del' if downloaded else 'skip'))
     )
     await message.answer(config.MSG['editor']['photo'], reply_markup=kbd)
 
@@ -281,12 +300,21 @@ async def store_photo(query: types.CallbackQuery, callback_data: Dict[str, str],
             poi.photo_out = None
         elif poi.photo_in == name:
             poi.photo_in = None
-    else:
+    elif which == 'del':
         path = os.path.join(config.PHOTOS, name + '.jpg')
         os.remove(path)
-        await query.answer('Хорошо, фоточку удалил.')
+        await query.answer('Хорошо, фоточку удалили.')
+    else:
+        await query.answer('Хорошо, фоточку забыли.')
     await state.set_data({'poi': poi})
     await print_edit_options(query.from_user, state)
+
+
+@dp.message_handler(commands='ename', state=EditState.confirm)
+async def edit_name(message: types.Message, state: FSMContext):
+    await message.answer(config.MSG['editor']['name'], reply_markup=cancel_attr_kbd())
+    await EditState.attr.set()
+    await state.update_data(attr='name')
 
 
 @dp.message_handler(commands='edesc', state=EditState.confirm)
@@ -469,7 +497,7 @@ async def store_location(message: types.Message, state: FSMContext):
 
 
 RE_URL = re.compile(r'^https?://')
-RE_HOURS = re.compile(r'^(?:(пн|вт|ср|чт|пт|сб|вс)(?:\s*-\s*(пн|вт|ср|чт|пт|сб|вс))?\s+)?'
+RE_HOURS = re.compile(r'^(?:(пн|вт|ср|чт|пт|сб|вс)(?:\s*-?\s*(пн|вт|ср|чт|пт|сб|вс))?\s+)?'
                       r'(\d\d?(?:[:.]\d\d)?)\s*-\s*(\d\d(?:[:.]\d\d)?)'
                       r'(?:\s+об?е?д?\s+(\d\d?(?:[:.]\d\d)?)\s*-\s*(\d\d(?:[:.]\d\d)?))?$')
 HOURS_WEEK = {'пн': 'Mo', 'вт': 'Tu', 'ср': 'We', 'чт': 'Th',
@@ -504,6 +532,24 @@ def parse_hours(s):
     return '; '.join(parts)
 
 
+def parse_link(value):
+    REPLACE_TITLE = {'instagram': 'инстаграм', 'вконтакте': 'vk', 'facebook': 'фейсбук'}
+    parts = value.lower().replace('. ', '.').split(None, 1)
+    if len(parts) == 1 and '.' not in parts[0]:
+        return parts
+    if len(parts) == 1:
+        parts = [config.MSG['default_link'], parts[0]]
+    if parts[0] in REPLACE_TITLE:
+        parts[0] = REPLACE_TITLE[parts[0]]
+    if parts[0] == 'инстаграм' and 'instagram.' not in parts[1]:
+        parts[1] = 'https://instagram.com/' + parts[1]
+    elif parts[0] == 'vk' and 'vk.' not in parts[1]:
+        parts[1] = 'https://vk.com/' + parts[1]
+    if '://' not in parts[1]:
+        parts[1] = 'https://' + parts[1]
+    return parts
+
+
 @dp.message_handler(state=EditState.attr)
 async def store_attr(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -511,7 +557,12 @@ async def store_attr(message: types.Message, state: FSMContext):
     attr = data['attr']
     value = message.text.strip()
 
-    if attr == 'desc':
+    if attr == 'name':
+        if value == '-':
+            await message.answer('Имя нельзя очищать', reply_markup=cancel_attr_kbd())
+            return
+        poi.name = value
+    elif attr == 'desc':
         poi.description = None if value == '-' else value
     elif attr == 'comment':
         poi.comment = None if value == '-' else value
@@ -519,8 +570,8 @@ async def store_attr(message: types.Message, state: FSMContext):
         if value == '-':
             poi.tag = None
         else:
-            parts = [p.strip().lower() for p in value.split('=')]
-            if len(parts) != 2 or not re.match(r'^[a-z]+$', parts[0] + parts[1]):
+            parts = [p.strip() for p in re.split(r'[ =]+', value.lower().replace('-', '_'))]
+            if len(parts) != 2 or not re.match(r'^[a-z]+$', parts[0]):
                 await message.answer(f'Тег должен быть в виде ключ=значение, а не {value}.',
                                      reply_markup=cancel_attr_kbd())
                 return
@@ -528,7 +579,7 @@ async def store_attr(message: types.Message, state: FSMContext):
     elif attr == 'keywords':
         new_kw = split_tokens(value)
         if new_kw:
-            old_kw = poi.keywords.split()
+            old_kw = [] if not poi.keywords else poi.keywords.split()
             poi.keywords = ' '.join(old_kw + new_kw)
     elif attr == 'address':
         poi.address_part = None if value == '-' else value
@@ -536,6 +587,10 @@ async def store_attr(message: types.Message, state: FSMContext):
         loc = parse_location(message)
         if not loc:
             await message.answer(config.MSG['new_poi']['no_location'],
+                                 reply_markup=edit_loc_kbd(poi))
+            return
+        if not valid_location(loc):
+            await message.answer(config.MSG['new_poi']['location_out'],
                                  reply_markup=edit_loc_kbd(poi))
             return
         poi.location = loc
@@ -555,27 +610,21 @@ async def store_attr(message: types.Message, state: FSMContext):
         if not value or value == '-':
             poi.phones = []
         else:
-            poi.phones = [p.strip() for p in value.split(';')]
+            poi.phones = [p.strip() for p in re.split(r'[;,]', value)]
     elif attr == 'links':
         if value:
-            parts = value.split(None, 1)
-            parts[0] = parts[0].lower()
-            if len(parts) == 1 and RE_URL.match(parts[0]):
-                parts = [config.MSG['default_link'], parts[0]]
-            if len(parts) == 1:
-                poi.links = [l for l in poi.links if l[0] != parts[0]]
-            else:
-                if not RE_URL.match(parts[1]):
-                    await message.answer(f'Можно только ссылки на http и https.',
-                                         reply_markup=cancel_attr_kbd())
-                    return
-                found = False
-                for i, l in enumerate(poi.links):
-                    if l[0] == parts[0]:
-                        found = True
-                        l[1] = parts[1]
-                if not found:
-                    poi.links.append(parts)
+            parts = parse_link(value)
+            if parts:
+                if len(parts) == 1:
+                    poi.links = [l for l in poi.links if l[0] != parts[0]]
+                else:
+                    found = False
+                    for i, l in enumerate(poi.links):
+                        if l[0] == parts[0]:
+                            found = True
+                            l[1] = parts[1]
+                    if not found:
+                        poi.links.append(parts)
     else:
         await message.answer(f'Атрибут {attr} пока не редактируем.')
 
@@ -592,18 +641,25 @@ async def delete_poi(message: types.Message, state: FSMContext):
         return
 
     poi = (await state.get_data())['poi']
-    await state.finish()
     await db.delete_poi(message.from_user.id, poi)
+    await state.finish()
     await message.answer(config.MSG['editor']['deleted'], reply_markup=get_buttons())
 
 
 @dp.message_handler(state=EditState.confirm)
 async def print_edit_again(message: types.Message, state: FSMContext):
-    poi = (await state.get_data())['poi']
     user = await get_user(message.from_user)
-    await db.add_to_queue(user, poi, message.text)
+    if user.is_moderator():
+        await message.answer('Вы же модератор, сделайте сами!')
+        return
+    poi = (await state.get_data())['poi']
+    if poi.id is None:
+        # Won't add an abstract message to the queue
+        await broadcast(message)
+    else:
+        await db.add_to_queue(user, poi, message.text)
     await state.finish()
-    await message.answer(config.MSG['editor']['sent'])
+    await message.answer(config.MSG['editor']['msg_sent'])
 
 
 @dp.callback_query_handler(state=EditState.confirm, text='save')
@@ -616,9 +672,10 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
         poi.needs_check = True
 
     # Send the POI to the database
+    poi_id = poi.id
     try:
         if user.is_moderator() or poi.id is None:
-            await db.insert_poi(query.from_user.id, poi)
+            poi_id = await db.insert_poi(query.from_user.id, poi)
             saved = 'saved'
         else:
             await db.add_to_queue(user, poi)
@@ -633,8 +690,9 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
 
     # Reset state and thank the user
     await state.finish()
-    await bot.send_message(
-        query.from_user.id,
-        config.MSG['editor'][saved],
-        reply_markup=get_buttons()
+    kbd = types.InlineKeyboardMarkup().add(
+        types.InlineKeyboardButton('👀 Посмотреть заведение',
+                                   callback_data=POI_LIST_CB.new(id=poi_id)),
+        types.InlineKeyboardButton('➕ Добавить новое', callback_data='new')
     )
+    await bot.send_message(query.from_user.id, config.MSG['editor'][saved], reply_markup=kbd)

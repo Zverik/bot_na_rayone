@@ -51,6 +51,14 @@ async def get_poi_by_ids(poi_ids: List[int]) -> POI:
     return [POI(r) async for r in cursor]
 
 
+async def get_poi_by_house(house: str) -> POI:
+    query = ("select * from poi where house = ? and in_index and "
+             "(tag is null or tag not in ('entrance', 'building'))")
+    db = await get_db()
+    cursor = await db.execute(query, (house,))
+    return [POI(r) async for r in cursor]
+
+
 async def get_poi_by_key(str_id: str) -> POI:
     query = "select * from poi where str_id = ?"
     db = await get_db()
@@ -62,7 +70,8 @@ async def get_poi_by_key(str_id: str) -> POI:
 async def find_poi(keywords: str) -> List[POI]:
     query = ("select poi.*, h.name as h_address from poi "
              "left join poi h on h.str_id = poi.house "
-             "where poi.rowid in (select docid from poisearch where poisearch match ?)")
+             "where poi.in_index and "
+             "poi.rowid in (select docid from poisearch where poisearch match ?)")
     db = await get_db()
     cursor = await db.execute(query, (keywords,))
     return [POI(r) async for r in cursor]
@@ -110,6 +119,14 @@ async def find_file_ids(paths: Dict[str, int]) -> Dict[str, str]:
             if r['size'] == paths[r['path']]}
 
 
+async def find_path_for_file_id(file_id: str) -> str:
+    db = await get_db()
+    query = "select path from file_ids where file_id = ? limit 1"
+    cursor = await db.execute(query, (file_id,))
+    row = await cursor.fetchone()
+    return None if not row else row[0]
+
+
 async def get_houses() -> List[POI]:
     query = "select * from poi where str_id is not null and tag = 'building'"
     db = await get_db()
@@ -129,17 +146,21 @@ async def insert_poi(user_id: int, poi: POI):
     )
     db = await get_db()
     await db.execute(query, tuple(fields.values()))
+
+    # Update audit
+    cursor = await db.execute("select last_insert_rowid()")
+    rowid = (await cursor.fetchone())[0]
+    poi.id = rowid
     await save_audit(user_id, user_id, None, poi)
 
     # Now update the search index
-    cursor = await db.execute("select last_insert_rowid()")
-    rowid = (await cursor.fetchone())[0]
     tagkw = ' '.join(config.MSG['tags'].get(poi.tag, [])) or None
     query2 = ("insert into poisearch (docid, name, keywords, tag) "
               "select rowid, replace(name, 'ё', 'е') as name, keywords, ? "
               "from poi where id = ?")
-    await db.execute(query2, (rowid, tagkw))
+    await db.execute(query2, (tagkw, rowid))
     await db.commit()
+    return poi.id
 
 
 async def update_poi(user_id: int, poi: POI):
@@ -147,12 +168,10 @@ async def update_poi(user_id: int, poi: POI):
     fields = poi.get_db_fields(orig)
     if not fields:
         logging.info('No changes in the poi %s "%s"', poi.id, poi.name)
-        return
-    logging.info('New fields: %s', fields)
+        return poi.id
 
     query = "update poi set {}, updated = current_timestamp where id = ?".format(
         ','.join([f'{k} = ?' for k in fields.keys()]))
-    logging.info(query)
     db = await get_db()
     await db.execute(query, (*fields.values(), poi.id))
     await save_audit(user_id, user_id, orig, poi)
@@ -162,13 +181,14 @@ async def update_poi(user_id: int, poi: POI):
                   "tag = ? where docid = ?")
         await db.execute(query2, (poi.id, tagkw, poi.id))
     await db.commit()
+    return poi.id
 
 
 async def delete_poi(user_id: int, poi: POI):
-    query = "delete from poi where id = ?"
     db = await get_db()
     await save_audit(user_id, user_id, poi, None)
-    await db.execute(query, (poi.id,))
+    await db.execute("delete from poisearch where docid = ?", (poi.id,))
+    await db.execute("delete from poi where id = ?", (poi.id,))
     await db.commit()
 
 
@@ -184,7 +204,7 @@ async def save_audit(user_id: int, approved_by: int, oldpoi: POI, poi: POI):
         query = ("insert into poi_audit (user_id, approved_by, poi_id, field, old_value) "
                  "values (?, ?, ?, 'poi', ?)")
         data = json.dumps(oldpoi.get_db_fields())
-        await db.execute(query, (user_id, approved_by, poi.id, data))
+        await db.execute(query, (user_id, approved_by, oldpoi.id, data))
     else:
         query = ("insert into poi_audit (user_id, approved_by, poi_id, field, "
                  "old_value, new_value) values (?, ?, ?, ?, ?, ?)")
@@ -196,6 +216,8 @@ async def save_audit(user_id: int, approved_by: int, oldpoi: POI, poi: POI):
 
 
 async def add_to_queue(user: UserInfo, poi: POI, message: str = None):
+    if poi.id is None:
+        raise ValueError(f'POI id should not be None. Msg = "{message}"')
     db = await get_db()
     if message:
         query = ("insert into queue (user_id, user_name, poi_id, field, new_value) "
@@ -260,3 +282,32 @@ async def get_last_poi(count: int = 1):
     db = await get_db()
     cursor = await db.execute(query)
     return [POI(r) async for r in cursor]
+
+
+async def get_random_poi(count: int = 10):
+    db = await get_db()
+    query = ("select * from poi where id in (select id from poi "
+             "where tag is null or tag not in ('building', 'entrance') "
+             f"order by random() limit {count})")
+    db = await get_db()
+    cursor = await db.execute(query)
+    return [POI(r) async for r in cursor]
+
+
+async def get_stats():
+    db = await get_db()
+    query = """\
+        select count(*) filter (where tag = 'building') as cnt_house,
+            count(*) filter (where tag = 'entrance') as cnt_entrance,
+            count(*) filter (where tag is null or
+                tag not in ('building', 'entrance')) as cnt_poi
+        from poi
+    """
+    cursor = await db.execute(query)
+    row = await cursor.fetchone()
+    stats = {
+        'buildings': row['cnt_house'],
+        'entrances': row['cnt_entrance'],
+        'pois': row['cnt_poi'],
+    }
+    return stats

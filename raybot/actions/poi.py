@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, POI
 from raybot.bot import bot
-from raybot.util import h, get_user, get_map
+from raybot.util import h, get_user, get_map, pack_ids
 import re
 import os
 import random
@@ -16,7 +16,8 @@ HTML = types.ParseMode.HTML
 POI_LIST_CB = CallbackData('poi', 'id')
 POI_LOCATION_CB = CallbackData('poiloc', 'id')
 POI_EDIT_CB = CallbackData('poiedit', 'id')
-POI_FULL_CB = CallbackData('poilist', 'query')
+POI_FULL_CB = CallbackData('plst', 'query', 'ids')
+POI_HOUSE_CB = CallbackData('poih', 'house')
 
 
 class PoiState(StatesGroup):
@@ -24,7 +25,8 @@ class PoiState(StatesGroup):
     poi_list = State()
 
 
-async def print_poi_list(user: types.User, query: str, pois: List[POI], full: bool = False):
+async def print_poi_list(user: types.User, query: str, pois: List[POI],
+                         full: bool = False, shuffle: bool = True):
     def uncap(s: str) -> str:
         if not s:
             return s
@@ -32,12 +34,14 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI], full: bo
 
     max_buttons = 9 if not full else 20
     location = (await get_user(user)).location
-    if location:
-        pois.sort(key=lambda p: location.distance(p.location))
-    else:
-        random.shuffle(pois)
-    pois.sort(key=lambda p: not p.hours or p.hours.is_open())
+    if shuffle:
+        if location:
+            pois.sort(key=lambda p: location.distance(p.location))
+        else:
+            random.shuffle(pois)
+        pois.sort(key=lambda p: not p.hours or p.hours.is_open())
     total_count = len(pois)
+    all_ids = pack_ids([p.id for p in pois])
     if total_count > max_buttons and not full:
         pois = pois[:max_buttons - 1]
 
@@ -60,8 +64,13 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI], full: bo
         kbd.insert(types.InlineKeyboardButton(
             b_title, callback_data=POI_LIST_CB.new(id=poi.id)))
     if total_count > max_buttons and not full:
+        try:
+            callback_data = POI_FULL_CB.new(query=query[:55], ids=all_ids)
+        except ValueError:
+            # Too long
+            callback_data = POI_FULL_CB.new(query=query[:55], ids='-')
         kbd.insert(types.InlineKeyboardButton(
-            f'Все {total_count}', callback_data=POI_FULL_CB.new(query=query)))
+            f'Все {total_count}', callback_data=callback_data))
 
     map_file = get_map([poi.location for poi in pois], ref=location)
     if not map_file:
@@ -135,7 +144,7 @@ def describe_poi(poi: POI):
     return '\n'.join(result)
 
 
-def make_poi_keyboard(poi: POI, full=False):
+def make_poi_keyboard(poi: POI):
     kbd = types.InlineKeyboardMarkup(row_width=2)
     if poi.links:
         link_dict = dict(poi.links)
@@ -153,6 +162,19 @@ def make_poi_keyboard(poi: POI, full=False):
     return kbd
 
 
+async def make_house_keyboard(poi: POI):
+    if not poi.key:
+        return None
+    pois = await db.get_poi_by_house(poi.key)
+    if not pois:
+        return None
+
+    return types.InlineKeyboardMarkup().add(
+        types.InlineKeyboardButton(
+            'Заведения в этом доме', callback_data=POI_HOUSE_CB.new(house=poi.key))
+    )
+
+
 async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bool = True):
     chat_id = user.id
     content = describe_poi(poi)
@@ -162,7 +184,7 @@ async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bo
     # Prepare photos
     photos = []
     photo_names = []
-    for photo in [poi.photo_out, poi.photo_in]:
+    for photo in [poi.photo_in, poi.photo_out]:
         if photo:
             path = os.path.join(config.PHOTOS, photo + '.jpg')
             if os.path.exists(path):
@@ -181,8 +203,13 @@ async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bo
         photos.append(types.InputFile(map_file.name))
         photo_names.append(None)
 
+    # Prepare the inline keyboard
+    if poi.tag == 'building':
+        kbd = await make_house_keyboard(poi)
+    else:
+        kbd = None if not buttons else make_poi_keyboard(poi)
+
     # Send the message
-    kbd = None if not buttons else make_poi_keyboard(poi)
     if not photos:
         msg = await bot.send_message(chat_id, content, parse_mode=HTML,
                                      reply_markup=kbd, disable_web_page_preview=True)

@@ -12,6 +12,7 @@ userdata = {}
 SKIP_TOKENS = set(config.MSG['skip'])
 # Markdown requires too much escaping, so we're using HTML
 HTML = types.ParseMode.HTML
+PRUNE_TIMEOUT = 600
 
 
 def reverse_synonims():
@@ -54,7 +55,7 @@ def prune_users(except_id: int) -> List[int]:
     for user_id in list(userdata.keys()):
         if user_id != except_id:
             data = userdata.get(user_id)
-            if data and time.time() - data.last_access > 30:
+            if data and time.time() - data.last_access > PRUNE_TIMEOUT:
                 pruned.append(user_id)
                 del userdata[user_id]
     return pruned
@@ -91,4 +92,4 @@ def pack_ids(ids: List[int]) -> str:
 
 def unpack_ids(s: str) -> List[int]:
     b = base64.a85decode(s.encode())
-    return list(struct.unpack('h' * (len(b) / 2), b))
+    return list(struct.unpack('h' * (len(b) // 2), b))
