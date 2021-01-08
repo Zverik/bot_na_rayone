@@ -91,11 +91,10 @@ async def get_role_users(role: str) -> List[int]:
     return [r[0] async for r in cursor]
 
 
-async def get_entrances(building: str, entrances: List[str]) -> List[str]:
-    query = "select str_id from poi where house = ? and str_id in ({})".format(
-        ','.join('?' * len(entrances)))
+async def get_entrances(building: str) -> List[str]:
+    query = "select str_id from poi where house = ? and tag = 'entrance'"
     db = await get_db()
-    cursor = await db.execute(query, (building, *entrances))
+    cursor = await db.execute(query, (building,))
     return [r[0] async for r in cursor]
 
 

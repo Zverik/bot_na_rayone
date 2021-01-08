@@ -6,7 +6,7 @@ backup/
 config/config.yml
 config/responses.yml
 config/addr.yml
-photo/
+photo*/
 tiles/
-Pipfile*
+Pipfile.lock
 __pycache__/

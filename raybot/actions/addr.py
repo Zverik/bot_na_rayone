@@ -76,8 +76,7 @@ async def print_apartment(user: types.User, building: str, apartment):
         await print_poi_by_key(user, building, buttons=False)
         return
 
-    possible_entrances = [e for e in config.ADDR['apartments'] if e.startswith(building)]
-    entrances = [building] + await db.get_entrances(building, possible_entrances)
+    entrances = [building] + await db.get_entrances(building)
     floor = None
     entrance = None
     entrance_first = None

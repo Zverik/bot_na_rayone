@@ -510,7 +510,7 @@ def parse_hours(s):
             return None
         if len(h) < 4:
             h += ':00'
-        return h.rjust(5, '0')
+        return h.replace('.', ':').rjust(5, '0')
 
     parts = []
     for part in s.split(','):

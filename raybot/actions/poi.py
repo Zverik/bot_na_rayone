@@ -42,8 +42,8 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
         pois.sort(key=lambda p: not p.hours or p.hours.is_open())
     total_count = len(pois)
     all_ids = pack_ids([p.id for p in pois])
-    if total_count > max_buttons and not full:
-        pois = pois[:max_buttons - 1]
+    if total_count > max_buttons:
+        pois = pois[:max_buttons if full else max_buttons - 1]
 
     content = config.MSG['poi_list'].replace('%s', query) + '\n'
     for i, poi in enumerate(pois, 1):
@@ -52,7 +52,11 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
         else:
             content += h(f'\n{i}. {poi.name}')
     if total_count > max_buttons:
-        content += f'\n\nСписок неполный, нажмите последнюю кнопку для запроса всех {total_count}.'
+        if not full:
+            content += (f'\n\nСписок неполный, нажмите последнюю кнопку '
+                        'для запроса всех {total_count}.')
+        else:
+            content += f'\n\nСписок неполный, но все {total_count} никак не поместятся.'
 
     if len(pois) == 4:
         kbd_width = 2
