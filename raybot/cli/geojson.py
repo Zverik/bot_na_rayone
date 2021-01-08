@@ -21,34 +21,32 @@ async def do_import(data):
             continue
         g = f['geometry']['coordinates']
         p = f['properties']
+        if '$rowid' in p:
+            row = p['$rowid']
         if 'id' in p:
             if p['id'] in ids:
                 raise ValueError(f'Duplicate id: {p["id"]}')
             ids.add(p['id'])
-        links = [l.strip().split() for l in p.get('links', '').split(';') if l.strip()]
-        links = None if not links else json.dumps(links)
-        if 'id' in p:
             refs[p['id']] = row
-        now = datetime.datetime.now()
+        links = [l.strip().split() for l in p.get('links', '').split(';') if l.strip()]
+        links = None if not links else json.dumps(links, ensure_ascii=False)
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         values.append([
             row,
             p.get('id'), p['name'], g[0], g[1], p.get('desc'),
             p.get('keywords'), p.get('photo'), p.get('inside'), p.get('tag'),
             p.get('hours'), links, yesno_to_bool(p.get('wifi')), yesno_to_bool(p.get('cards')),
-            p.get('phone'), p.get('comment'), p.get('address'), 0 if p.get('index') == 'no' else 1,
-            p.get('created_at', now), p.get('updated_at', now),
-            1 if p.get('needs_check') == 'yes' else 0,
-            p.get('house')
+            p.get('phones'), p.get('comment'), p.get('address'), 0 if p.get('index') == 'no' else 1,
+            p.get('$created', now), p.get('$updated', now),
+            1 if p.get('needs_check') == 'yes' else 0, p.get('house'),
+            0 if p.get('active') == 'no' else 1
         ])
         row += 1
 
-    # Fix house references
+    # Validate house references
     for v in values:
-        if v[-1]:
-            if v[-1] not in refs:
-                raise IndexError(f'POI "{v[2]}" references missing key {v[-1]}.')
-            # keeping house as string
-            # v[-1] = refs[v[-1]]
+        if v[-2] and v[-2] not in refs:
+            raise IndexError(f'POI "{v[2]}" references missing key {v[-2]}.')
 
     # Upload to the database
     conn = await db.get_db()
@@ -60,16 +58,20 @@ async def do_import(data):
         keywords, photo_out, photo_in,    tag,
         hours,    links,     has_wifi,    accepts_cards,
         phones,   comment,   address,     in_index,
-        created,  updated,   needs_check, house
+        created,  updated,
+        needs_check, house,
+        active
     ) values (
         ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?
+        ?, ?,
+        ?, ?,
+        ?
     )""", values)
-    reindex(conn)
+    await reindex(conn)
     await conn.commit()
     await conn.close()
 
@@ -100,12 +102,12 @@ async def do_export():
             'phones': row['phones'],
             'comment': row['comment'],
             'address': row['address'],
-            'index': 'no' if row['in_index'] is False else None,
-            '$created_at': row['created'],
-            '$updated_at': row['updated'],
+            'index': 'no' if not row['in_index'] else None,
+            '$created': row['created'],
+            '$updated': row['updated'],
             'needs_check': 'yes' if row['needs_check'] else None,
-            'house': row['house_id'],
-            'active': 'no' if row['active'] == 0 else None,
+            'house': row['house'],
+            'active': 'no' if 'active' in row.keys() and not row['active'] else None,
         }
         if row['links']:
             props['links'] = '; '.join([' '.join(l) for l in json.loads(row['links'])])

@@ -16,7 +16,7 @@ from aiogram.dispatcher import FSMContext
 @dp.message_handler(commands=['start'], state='*')
 async def welcome(message: types.Message, state: FSMContext):
     await state.finish()
-    await message.answer(config.MSG['start'], reply_markup=get_buttons())
+    await message.answer(config.MSG['start'].replace('\n', '\n\n'), reply_markup=get_buttons())
 
 
 @dp.message_handler(commands=['help'], state='*')

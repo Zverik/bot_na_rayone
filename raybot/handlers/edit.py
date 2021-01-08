@@ -6,6 +6,7 @@ from raybot.actions.poi import POI_EDIT_CB, POI_LIST_CB
 from raybot.actions.messages import broadcast_str, broadcast
 import re
 import os
+import logging
 import random
 import humanized_opening_hours as hoh
 from aiosqlite import DatabaseError
@@ -16,6 +17,7 @@ from aiogram import types
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.utils.exceptions import TelegramAPIError
 
 
 HOUSE_CB = CallbackData('ehouse', 'hid')
@@ -263,11 +265,16 @@ async def upload_photo(message: types.Message, state: FSMContext):
     name = await db.find_path_for_file_id(file_id)
     downloaded = False
     if not name:
-        f = await bot.get_file(file_id)
-        name = (''.join(random.sample(ascii_lowercase, 4)) +
-                datetime.now().strftime('%y%m%d%H%M%S'))
-        path = os.path.join(config.PHOTOS, name + '.jpg')
-        await f.download(path)
+        try:
+            f = await bot.get_file(file_id)
+            name = (''.join(random.sample(ascii_lowercase, 4)) +
+                    datetime.now().strftime('%y%m%d%H%M%S'))
+            path = os.path.join(config.PHOTOS, name + '.jpg')
+            await f.download(path)
+        except TelegramAPIError:
+            logging.exception('Image upload fail')
+            await message.answer(config.MSG['editor']['upload_fail'])
+            return
         if not os.path.exists(path):
             await message.answer(config.MSG['editor']['upload_fail'])
             return

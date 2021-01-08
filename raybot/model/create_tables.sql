@@ -20,7 +20,8 @@ create table poi (
   comment text,
   address text,
   in_index boolean not null default true,
-  house text -- reference to a poi / str_id
+  house text, -- reference to a poi / str_id
+  active boolean default true
 );
 create unique index poi_str_id_idx on poi (str_id);
 

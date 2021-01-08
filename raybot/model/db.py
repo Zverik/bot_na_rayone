@@ -166,7 +166,6 @@ async def update_poi(user_id: int, poi: POI):
     orig = await get_poi_by_id(poi.id)
     fields = poi.get_db_fields(orig)
     if not fields:
-        logging.info('No changes in the poi %s "%s"', poi.id, poi.name)
         return poi.id
 
     query = "update poi set {}, updated = current_timestamp where id = ?".format(

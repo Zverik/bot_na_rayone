@@ -53,10 +53,9 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             content += h(f'\n{i}. {poi.name}')
     if total_count > max_buttons:
         if not full:
-            content += (f'\n\nСписок неполный, нажмите последнюю кнопку '
-                        'для запроса всех {total_count}.')
+            content += config.MSG['poi_not_full'].format(total_count=total_count)
         else:
-            content += f'\n\nСписок неполный, но все {total_count} никак не поместятся.'
+            content += config.MSG['poi_too_many'].format(total_count=total_count)
 
     if len(pois) == 4:
         kbd_width = 2
