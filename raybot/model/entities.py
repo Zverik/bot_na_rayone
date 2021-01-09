@@ -126,9 +126,15 @@ class UserInfo:
     last_access: int = 0  # Last access time
     roles: List[str] = field(default_factory=list)
 
-    def __init__(self, user):
-        self.id = user.id
-        self.name = ' '.join(s for s in [user.first_name, user.last_name] if s)
+    def __init__(self, user=None, user_id=None, user_name=None):
+        if user:
+            self.id = user.id
+            self.name = ' '.join(s for s in [user.first_name, user.last_name] if s)
+        elif user_id:
+            self.id = user_id
+            self.name = user_name
+        else:
+            raise ValueError('Either a user or an id and name are required.')
         self.roles = []
         self.last_access = time()
 

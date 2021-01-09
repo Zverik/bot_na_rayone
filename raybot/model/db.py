@@ -84,11 +84,25 @@ async def get_roles(user_id: int) -> List[str]:
     return [r[0] async for r in cursor]
 
 
-async def get_role_users(role: str) -> List[int]:
-    query = "select user_id from roles where role = ?"
+async def get_role_users(role: str) -> List[UserInfo]:
+    query = "select user_id, name from roles where role = ?"
     db = await get_db()
     cursor = await db.execute(query, (role,))
-    return [r[0] async for r in cursor]
+    return [UserInfo(user_id=r[0], user_name=r[1]) async for r in cursor]
+
+
+async def add_user_to_role(user: UserInfo, role: str, added_by: UserInfo):
+    query = "insert into roles (user_id, name, role, added_by) values (?, ?, ?, ?)"
+    db = await get_db()
+    await db.execute(query, (user.id, user.name, role, added_by.name))
+    await db.commit()
+
+
+async def remove_user_from_role(user_id: int, role: str):
+    query = "delete from roles where user_id = ? and role = ?"
+    db = await get_db()
+    await db.execute(query, (user_id, role))
+    await db.commit()
 
 
 async def get_entrances(building: str) -> List[str]:

@@ -2,16 +2,22 @@ import os
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, get_user
+from raybot.util import h, HTML, get_user, forget_user
 from raybot.actions.poi import print_poi, POI_EDIT_CB
 from typing import Dict
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.handler import SkipHandler
+from aiogram.dispatcher.filters.state import State, StatesGroup
 
 
 MSG_CB = CallbackData('qmsg', 'action', 'id')
+MOD_REMOVE_CB = CallbackData('modrm', 'id')
+
+
+class ModState(StatesGroup):
+    mod = State()
 
 
 @dp.message_handler(commands='queue', state='*')
@@ -23,7 +29,7 @@ async def print_queue(message: types.Message, state: FSMContext):
 
 async def print_next_queued(user: types.User):
     info = await get_user(user)
-    if info.id != config.ADMIN and 'moderator' not in info.roles:
+    if not info.is_moderator():
         return False
 
     queue = await db.get_queue(1)
@@ -108,3 +114,61 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
         await query.answer(f'Что за действие в queue, "{action}"?')
 
     await print_next_queued(query.from_user)
+
+
+@dp.message_handler(state=ModState.mod)
+async def add_mod(message: types.Message, state: FSMContext):
+    if message.from_user.id != config.ADMIN:
+        raise SkipHandler
+    if not message.is_forward():
+        await message.answer('Форвардните пост от человека, чтобы сделать его модератором.')
+        return
+    await state.finish()
+    me = await get_user(message.from_user)
+    new_user = await get_user(message.forward_from)
+    if new_user.is_moderator():
+        await message.answer('Он/она уже модератор.')
+        return
+    await db.add_user_to_role(new_user, 'moderator', me)
+    forget_user(new_user.id)
+    await message.answer(f'Пользователь {new_user.name} теперь модератор.')
+    await bot.send_message(new_user.id, 'Вы теперь модератор. Попробуйте /queue')
+
+
+@dp.callback_query_handler(MOD_REMOVE_CB.filter(), state=ModState.mod)
+async def remove_mod(query: types.CallbackQuery, callback_data: Dict[str, str],
+                     state: FSMContext):
+    if query.from_user.id != config.ADMIN:
+        return
+    await state.finish()
+    user_id = callback_data['id']
+    if user_id != '-':
+        await db.remove_user_from_role(int(user_id), 'moderator')
+        forget_user(int(user_id))
+        await bot.send_message(query.from_user.id, 'Пользователь больше не модератор.')
+    else:
+        await query.answer('Ок')
+
+
+@dp.message_handler(commands='mod', state='*')
+async def manage_mods(message: types.Message, state: FSMContext):
+    if message.from_user.id != config.ADMIN:
+        raise SkipHandler
+    await state.finish()
+    mods = await db.get_role_users('moderator')
+    kbd = types.InlineKeyboardMarkup()
+    if not mods:
+        content = ('Нет ни одного модератора. Форвардните пост от человека, '
+                   'чтобы сделать её/его модератором.')
+    else:
+        content = 'Список модераторов:\n\n'
+        for i, mod in enumerate(mods, 1):
+            content += f'{i}. {mod.name}\n'
+            kbd.insert(types.InlineKeyboardButton(
+                f'❌ {i} {mod.name}', callback_data=MOD_REMOVE_CB.new(id=str(mod.id))))
+        content += ('\nНажмите кнопку, чтобы удалить человека из модераторов, либо '
+                    'форвардните пост от нового человека, чтобы сделать её/его модератором.')
+    kbd.insert(types.InlineKeyboardButton(
+        'Оставить как есть', callback_data=MOD_REMOVE_CB.new(id='-')))
+    await message.answer(content, reply_markup=kbd)
+    await ModState.mod.set()

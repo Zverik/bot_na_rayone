@@ -61,6 +61,11 @@ def prune_users(except_id: int) -> List[int]:
     return pruned
 
 
+def forget_user(user_id: int):
+    if user_id in userdata:
+        del userdata[user_id]
+
+
 def split_tokens(message, process=True):
     s = message.strip().lower().replace('ё', 'е')
     tokens = re.split(r'[\s,.+=!@#$%^&*()\'"«»<>/?`~|_-]+', s)
