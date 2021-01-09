@@ -519,6 +519,8 @@ def parse_hours(s):
             h += ':00'
         return h.replace('.', ':').rjust(5, '0')
 
+    if s in ('24', '24/7'):
+        return '24/7'
     parts = []
     for part in s.split(','):
         m = RE_HOURS.match(part.strip().lower())

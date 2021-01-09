@@ -1,3 +1,4 @@
+import os
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
@@ -33,10 +34,11 @@ async def print_next_queued(user: types.User):
     q = queue[0]
     poi = await db.get_poi_by_id(q.poi_id)
     if not poi:
-        await bot.send_message('POI пропал, странно. Удаляю запись.')
+        await bot.send_message(user.id, 'POI пропал, странно. Удаляю запись.')
         await db.delete_queue(q)
         return True
 
+    photo = None
     if q.field == 'message':
         content = config.MSG['queue']['message'].format(
             user=h(q.user_name), name=h(poi.name))
@@ -49,6 +51,10 @@ async def print_next_queued(user: types.User):
         vnew = '<i>ничего</i>' if q.new_value is None else h(q.new_value)
         content += f'\n<b>Сейчас:</b> {vold}'
         content += f'\n<b>Будет:</b> {vnew}'
+        if q.field in ('photo_in', 'photo_out') and q.new_value:
+            photo = os.path.join(config.PHOTOS, q.new_value + '.jpg')
+            if not os.path.exists(photo):
+                photo = None
 
     kbd = types.InlineKeyboardMarkup(row_width=3)
     if q.field != 'message':
@@ -68,7 +74,11 @@ async def print_next_queued(user: types.User):
         callback_data=MSG_CB.new(action='del', id=str(q.id)))
     )
 
-    await bot.send_message(user.id, content, parse_mode=HTML, reply_markup=kbd)
+    if not photo:
+        await bot.send_message(user.id, content, parse_mode=HTML, reply_markup=kbd)
+    else:
+        await bot.send_photo(user.id, types.InputFile(photo), caption=content,
+                             parse_mode=HTML, reply_markup=kbd)
     return True
 
 
