@@ -52,7 +52,7 @@ async def get_poi_by_ids(poi_ids: List[int]) -> POI:
 
 
 async def get_poi_by_house(house: str) -> POI:
-    query = ("select * from poi where house = ? and in_index and "
+    query = ("select * from poi where house = ? and in_index and delete_reason is null and "
              "(tag is null or tag not in ('entrance', 'building'))")
     db = await get_db()
     cursor = await db.execute(query, (house,))
@@ -70,7 +70,7 @@ async def get_poi_by_key(str_id: str) -> POI:
 async def find_poi(keywords: str) -> List[POI]:
     query = ("select poi.*, h.name as h_address from poi "
              "left join poi h on h.str_id = poi.house "
-             "where poi.in_index and "
+             "where poi.in_index and poi.delete_reason is null and "
              "poi.rowid in (select docid from poisearch where poisearch match ?)")
     db = await get_db()
     cursor = await db.execute(query, (keywords,))
@@ -167,7 +167,7 @@ async def insert_poi(user_id: int, poi: POI):
     await save_audit(user_id, user_id, None, poi)
 
     # Now update the search index
-    tagkw = ' '.join(config.MSG['tags'].get(poi.tag, [])) or None
+    tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
     query2 = ("insert into poisearch (docid, name, keywords, tag) "
               "select rowid, replace(name, 'ё', 'е') as name, keywords, ? "
               "from poi where id = ?")
@@ -187,20 +187,36 @@ async def update_poi(user_id: int, poi: POI):
     db = await get_db()
     await db.execute(query, (*fields.values(), poi.id))
     await save_audit(user_id, user_id, orig, poi)
-    if 'keywords' in fields or 'tag' in fields:
-        tagkw = ' '.join(config.MSG['tags'].get(poi.tag, [])) or None
-        query2 = ("update poisearch set keywords = (select keywords from poi where id = ?), "
+    if 'keywords' in fields or 'tag' in fields or 'name' in fields:
+        tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
+        query2 = ("update poisearch set keywords = ?, name = ?, "
                   "tag = ? where docid = ?")
-        await db.execute(query2, (poi.id, tagkw, poi.id))
+        await db.execute(query2, (poi.keywords, poi.name, tagkw, poi.id))
     await db.commit()
     return poi.id
 
 
-async def delete_poi(user_id: int, poi: POI):
+async def delete_poi(user_id: int, poi: POI, reason: str):
     db = await get_db()
-    await save_audit(user_id, user_id, poi, None)
+    query = ("insert into poi_audit (user_id, approved_by, poi_id, field, "
+             "old_value, new_value) values (?, ?, ?, 'delete_reason', ?, ?)")
+    await db.execute(query, (user_id, user_id, poi.id, None, reason))
     await db.execute("delete from poisearch where docid = ?", (poi.id,))
-    await db.execute("delete from poi where id = ?", (poi.id,))
+    await db.execute("update poi set delete_reason = ?, updated = current_timestamp "
+                     "where id = ?", (reason, poi.id))
+    await db.commit()
+
+
+async def restore_poi(user_id: int, poi: POI):
+    db = await get_db()
+    query = ("insert into poi_audit (user_id, approved_by, poi_id, field, "
+             "old_value, new_value) values (?, ?, ?, 'delete_reason', ?, ?)")
+    await db.execute(query, (user_id, user_id, poi.id, poi.delete_reason, None))
+    await db.execute("update poi set delete_reason = null, updated = current_timestamp "
+                     "where id = ?", (poi.id, ))
+    tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
+    query2 = "insert into poisearch (keywords, name, tag, docid) values (?, ?, ?, ?)"
+    await db.execute(query2, (poi.keywords, poi.name, tagkw, poi.id))
     await db.commit()
 
 
@@ -248,7 +264,6 @@ async def add_to_queue(user: UserInfo, poi: POI, message: str = None):
 
 
 async def get_queue(count: int = 1):
-    db = await get_db()
     query = f"select * from queue order by ts desc limit {count}"
     db = await get_db()
     cursor = await db.execute(query)
@@ -280,7 +295,7 @@ async def apply_queue(user_id: int, q: QueueMessage):
                   "where docid = ?")
         await db.execute(query2, (q.poi_id, q.poi_id))
     elif q.field == 'tag':
-        tagkw = ' '.join(config.MSG['tags'].get(q.new_value, [])) or None
+        tagkw = ' '.join(config.TAGS['tags'].get(q.new_value, [])) or None
         query2 = "update poisearch set tag = ? where docid = ?"
         await db.execute(query2, (tagkw, q.poi_id))
     await db.execute(query, (q.user_id, user_id, q.poi_id, q.field, q.old_value, q.new_value))
@@ -288,9 +303,34 @@ async def apply_queue(user_id: int, q: QueueMessage):
     await db.commit()
 
 
+async def get_next_unchecked():
+    query = "select * from poi where needs_check order by created limit 1"
+    db = await get_db()
+    cursor = await db.execute(query)
+    row = await cursor.fetchone()
+    return None if not row else POI(row)
+
+
+async def validate_poi(poi_id: int):
+    query = "update poi set needs_check = 0 where id = ?"
+    db = await get_db()
+    await db.execute(query, (poi_id,))
+    await db.commit()
+
+
 async def get_last_poi(count: int = 1):
     db = await get_db()
-    query = f"select * from poi order by created desc limit {count}"
+    query = ("select * from poi where delete_reason is null "
+             f"order by created desc limit {count}")
+    db = await get_db()
+    cursor = await db.execute(query)
+    return [POI(r) async for r in cursor]
+
+
+async def get_last_deleted(count: int = 1):
+    db = await get_db()
+    query = ("select * from poi where delete_reason is not null "
+             f"order by updated desc limit {count}")
     db = await get_db()
     cursor = await db.execute(query)
     return [POI(r) async for r in cursor]
@@ -299,8 +339,8 @@ async def get_last_poi(count: int = 1):
 async def get_random_poi(count: int = 10):
     db = await get_db()
     query = ("select * from poi where id in (select id from poi "
-             "where tag is null or tag not in ('building', 'entrance') "
-             f"order by random() limit {count})")
+             "where (tag is null or tag not in ('building', 'entrance')) "
+             f"and delete_reason is null order by random() limit {count})")
     db = await get_db()
     cursor = await db.execute(query)
     return [POI(r) async for r in cursor]
@@ -311,8 +351,8 @@ async def get_stats():
     query = """\
         select count(*) filter (where tag = 'building') as cnt_house,
             count(*) filter (where tag = 'entrance') as cnt_entrance,
-            count(*) filter (where tag is null or
-                tag not in ('building', 'entrance')) as cnt_poi
+            count(*) filter (where delete_reason is null and (tag is null or
+                tag not in ('building', 'entrance'))) as cnt_poi
         from poi
     """
     cursor = await db.execute(query)

@@ -42,7 +42,7 @@ async def send_message(message: types.Message, state: FSMContext):
     types.ContentType.STICKER, types.ContentType.PHOTO,
     types.ContentType.VIDEO, types.ContentType.VIDEO_NOTE,
     types.ContentType.VOICE, types.ContentType.LOCATION,
-    types.ContentType.CONTACT
+    types.ContentType.CONTACT, types.ContentType.TEXT
 ], state='*')
 async def process_reply_type(message: types.Message, state: FSMContext):
     if message.reply_to_message and message.reply_to_message.is_forward():

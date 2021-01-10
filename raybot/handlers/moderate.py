@@ -3,7 +3,7 @@ from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
 from raybot.util import h, HTML, get_user, forget_user
-from raybot.actions.poi import print_poi, POI_EDIT_CB
+from raybot.actions.poi import print_poi, POI_EDIT_CB, print_poi_list, PoiState
 from typing import Dict
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
@@ -13,6 +13,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 
 
 MSG_CB = CallbackData('qmsg', 'action', 'id')
+POI_VALIDATE_CB = CallbackData('qpoi', 'id')
 MOD_REMOVE_CB = CallbackData('modrm', 'id')
 
 
@@ -27,6 +28,37 @@ async def print_queue(message: types.Message, state: FSMContext):
         raise SkipHandler
 
 
+async def print_next_added(user: types.User):
+    info = await get_user(user)
+    if not info.is_moderator():
+        return False
+    poi = await db.get_next_unchecked()
+    if not poi:
+        await bot.send_message(user.id, config.MSG['queue']['empty'])
+        return True
+    await print_poi(user, poi)
+
+    content = config.MSG['queue']['new_poi']
+    kbd = types.InlineKeyboardMarkup().add(
+        types.InlineKeyboardButton(
+            config.MSG['queue']['apply'],
+            callback_data=POI_VALIDATE_CB.new(id=str(poi.id))
+        )
+    )
+    await bot.send_message(user.id, content, reply_markup=kbd)
+
+
+@dp.callback_query_handler(POI_VALIDATE_CB.filter(), state='*')
+async def validate_poi(query: types.CallbackQuery, callback_data: Dict[str, str]):
+    poi = await db.get_poi_by_id(int(callback_data['id']))
+    if not poi:
+        await query.answer('POI пропал, странно.')
+        return
+    await db.validate_poi(poi.id)
+    await query.answer('Заведение проверено.')
+    await print_next_queued(query.from_user)
+
+
 async def print_next_queued(user: types.User):
     info = await get_user(user)
     if not info.is_moderator():
@@ -34,7 +66,8 @@ async def print_next_queued(user: types.User):
 
     queue = await db.get_queue(1)
     if not queue:
-        await bot.send_message(user.id, config.MSG['queue']['empty'])
+        # await bot.send_message(user.id, config.MSG['queue']['empty'])
+        return await print_next_added(user)
         return True
 
     q = queue[0]
@@ -116,7 +149,7 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
     await print_next_queued(query.from_user)
 
 
-@dp.message_handler(state=ModState.mod)
+@dp.message_handler(content_types=types.ContentType.ANY, state=ModState.mod)
 async def add_mod(message: types.Message, state: FSMContext):
     if message.from_user.id != config.ADMIN:
         raise SkipHandler
@@ -172,3 +205,11 @@ async def manage_mods(message: types.Message, state: FSMContext):
         'Оставить как есть', callback_data=MOD_REMOVE_CB.new(id='-')))
     await message.answer(content, reply_markup=kbd)
     await ModState.mod.set()
+
+
+@dp.message_handler(commands='deleted', state='*')
+async def print_deleted(message: types.Message, state: FSMContext):
+    pois = await db.get_last_deleted(6)
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
+    await print_poi_list(message.from_user, 'last', pois, shuffle=False)

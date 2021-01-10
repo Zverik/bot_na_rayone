@@ -5,21 +5,28 @@ from raybot.actions.poi import (
 )
 from raybot.model import db
 from raybot.bot import dp, bot
-from raybot.util import split_tokens, unpack_ids
+from raybot.util import split_tokens, unpack_ids, save_location
 from typing import Dict
 from aiogram import types
 from aiogram.dispatcher import FSMContext, filters
 
 
 @dp.callback_query_handler(POI_FULL_CB.filter(), state='*')
-async def all_pois(query: types.CallbackQuery, callback_data: Dict[str, str]):
-    txt = callback_data['query']
-    ids = callback_data['ids']
-    if len(ids) < 2:
-        tokens = split_tokens(txt)
-        pois = await db.find_poi(' '.join(tokens))
+async def all_pois(query: types.CallbackQuery, callback_data: Dict[str, str],
+                   state: FSMContext):
+    cur_state = None if not state else await state.get_state()
+    if cur_state == PoiState.poi_list.state:
+        data = await state.get_data()
+        txt = data['query']
+        pois = await db.get_poi_by_ids(data['poi'])
     else:
-        pois = await db.get_poi_by_ids(unpack_ids(ids))
+        txt = callback_data['query']
+        ids = callback_data['ids']
+        if len(ids) < 2:
+            tokens = split_tokens(txt)
+            pois = await db.find_poi(' '.join(tokens))
+        else:
+            pois = await db.get_poi_by_ids(unpack_ids(ids))
     await print_poi_list(query.from_user, txt, pois, True)
 
 
@@ -66,16 +73,30 @@ async def in_house_callback(query: types.CallbackQuery, callback_data: Dict[str,
         await state.set_data({'poi': pois[0].id})
         await print_poi(query.from_user, pois[0])
     else:
+        await PoiState.poi_list.set()
+        await state.set_data({'query': query, 'poi': [p.id for p in pois]})
         await print_poi_list(query.from_user, data.name, pois, True)
 
 
 @dp.message_handler(commands='last', state='*')
 async def print_last(message: types.Message, state: FSMContext):
     pois = await db.get_last_poi(6)
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'last', 'poi': [p.id for p in pois]})
     await print_poi_list(message.from_user, 'last', pois, shuffle=False)
 
 
 @dp.message_handler(commands='random', state='*')
-async def print_random(message: types.Message):
+async def print_random(message: types.Message, state: FSMContext):
     pois = await db.get_random_poi(6)
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'random', 'poi': [p.id for p in pois]})
     await print_poi_list(message.from_user, 'random', pois, shuffle=False)
+
+
+@dp.message_handler(content_types=types.ContentType.LOCATION, state=PoiState.poi_list)
+async def set_loc(message: types.Message, state: FSMContext):
+    await save_location(message)
+    data = await state.get_data()
+    pois = await db.get_poi_by_ids(data['poi'])
+    await print_poi_list(message.from_user, data['query'], pois)

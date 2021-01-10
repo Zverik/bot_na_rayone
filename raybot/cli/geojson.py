@@ -38,8 +38,7 @@ async def do_import(data):
             p.get('hours'), links, yesno_to_bool(p.get('wifi')), yesno_to_bool(p.get('cards')),
             p.get('phones'), p.get('comment'), p.get('address'), 0 if p.get('index') == 'no' else 1,
             p.get('$created', now), p.get('$updated', now),
-            1 if p.get('needs_check') == 'yes' else 0, p.get('house'),
-            0 if p.get('active') == 'no' else 1
+            1 if p.get('needs_check') == 'yes' else 0, p.get('house'), p.get('reason')
         ])
         row += 1
 
@@ -59,8 +58,7 @@ async def do_import(data):
         hours,    links,     has_wifi,    accepts_cards,
         phones,   comment,   address,     in_index,
         created,  updated,
-        needs_check, house,
-        active
+        needs_check, house, delete_reason
     ) values (
         ?,
         ?, ?, ?, ?, ?,
@@ -68,8 +66,7 @@ async def do_import(data):
         ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?,
-        ?, ?,
-        ?
+        ?, ?, ?
     )""", values)
     await reindex(conn)
     await conn.commit()
@@ -107,7 +104,7 @@ async def do_export():
             '$updated': row['updated'],
             'needs_check': 'yes' if row['needs_check'] else None,
             'house': row['house'],
-            'active': 'no' if 'active' in row.keys() and not row['active'] else None,
+            'reason': row['delete_reason'],
         }
         if row['links']:
             props['links'] = '; '.join([' '.join(l) for l in json.loads(row['links'])])

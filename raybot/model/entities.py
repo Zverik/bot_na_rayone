@@ -15,12 +15,12 @@ class Location:
 
     def distance(self, other) -> float:
         """Not exact!"""
-        f1 = radians(self.lat)
-        f2 = radians(other.lat)
-        l1 = radians(self.lon)
-        l2 = radians(other.lon)
-        x = (l2 - l1) * cos((f1 + f2) / 2)
-        y = f2 - f1
+        lat1 = radians(self.lat)
+        lat2 = radians(other.lat)
+        lon1 = radians(self.lon)
+        lon2 = radians(other.lon)
+        x = (lon2 - lon1) * cos((lat1 + lat2) / 2)
+        y = lat2 - lat1
         return sqrt(x * x + y * y) * 6371e3
 
 
@@ -79,10 +79,6 @@ class POI:
             self.keywords = keywords
             self.phones = []
             self.links = []
-
-    @property
-    def address(self):
-        return ', '.join([s for s in (self.house_name, self.address_part) if s])
 
     def get_db_fields(self, orig=None) -> dict:
         def bool_to_int(v):

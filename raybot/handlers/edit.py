@@ -24,6 +24,7 @@ HOUSE_CB = CallbackData('ehouse', 'hid')
 BOOL_CB = CallbackData('boolattr', 'attr', 'value')
 PHOTO_CB = CallbackData('ephoto', 'name', 'which')
 TAG_CB = CallbackData('etag', 'tag')
+TAG_PAGE_CB = CallbackData('tagpg', 'page')
 
 
 class EditState(StatesGroup):
@@ -33,6 +34,7 @@ class EditState(StatesGroup):
     confirm = State()
     attr = State()
     comment = State()
+    message = State()
 
 
 def cancel_keyboard():
@@ -69,6 +71,9 @@ async def new_cancel(query: types.CallbackQuery, state: FSMContext):
 
 @dp.callback_query_handler(state='*', text='new')
 async def new_poi(query: types.CallbackQuery):
+    if config.MAINTENANCE:
+        await bot.send_message(query.from_user.id, config.MSG['maintenance'])
+        return
     await EditState.name.set()
     await bot.send_message(
         query.from_user.id,
@@ -80,6 +85,9 @@ async def new_poi(query: types.CallbackQuery):
 @dp.callback_query_handler(POI_EDIT_CB.filter(), state='*')
 async def edit_poi(query: types.CallbackQuery, callback_data: Dict[str, str],
                    state: FSMContext):
+    if config.MAINTENANCE:
+        await bot.send_message(query.from_user.id, config.MSG['maintenance'])
+        return
     poi = await db.get_poi_by_id(int(callback_data['id']))
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
@@ -198,6 +206,7 @@ async def print_edit_options(user: types.User, state: FSMContext, comment=None):
         photos = 'нет'
     lines.append(f'<b>Фотографии:</b> {photos} (залейте замену или /ephoto для просмотра)')
     lines.append('🗑️ Удалить: /delete')
+    lines.append('✉️ Написать модераторам: /msg')
 
     content = '\n'.join(lines)
     if comment is None:
@@ -233,13 +242,27 @@ def boolean_kbd(attr: str):
     )
 
 
-def tag_kbd():
+def tag_kbd(page: int = 1):
+    ROWS = 4
+    tags = config.TAGS['suggest_tags']
     kbd = types.InlineKeyboardMarkup(row_width=3)
-    for tag in config.MSG['suggest_tags']:
-        kbd.insert(types.InlineKeyboardButton(config.MSG['tags'].get(tag, [tag])[0],
+    if (page - 1) * ROWS * 3 >= len(tags):
+        page = 1
+    for tag in tags[(page - 1) * ROWS * 3:page * ROWS * 3]:
+        kbd.insert(types.InlineKeyboardButton(config.TAGS['tags'].get(tag, [tag])[0],
                                               callback_data=TAG_CB.new(tag=tag)))
-    kbd.add(types.InlineKeyboardButton(config.MSG['editor']['cancel'], callback_data='cancel_attr'))
+    kbd.add(
+        types.InlineKeyboardButton('⏭️ Ещё', callback_data=TAG_PAGE_CB.new(page=str(page + 1))),
+        types.InlineKeyboardButton(config.MSG['editor']['cancel'], callback_data='cancel_attr')
+    )
     return kbd
+
+
+@dp.callback_query_handler(TAG_PAGE_CB.filter(), state=EditState.attr)
+async def next_page(query: types.CallbackQuery, callback_data: Dict[str, str]):
+    kbd = tag_kbd(int(callback_data['page']))
+    await bot.edit_message_reply_markup(
+        query.from_user.id, query.message.message_id, reply_markup=kbd)
 
 
 @dp.message_handler(commands='ephoto', state=EditState.confirm)
@@ -315,6 +338,16 @@ async def store_photo(query: types.CallbackQuery, callback_data: Dict[str, str],
         await query.answer('Хорошо, фоточку забыли.')
     await state.set_data({'poi': poi})
     await print_edit_options(query.from_user, state)
+
+
+@dp.message_handler(commands='msg', state=EditState.confirm)
+async def message_intro(message: types.Message, state: FSMContext):
+    user = await get_user(message.from_user)
+    if user.is_moderator():
+        await message.answer('Вы же модератор, сделайте сами!')
+        return
+    await message.answer(config.MSG['editor']['message'], reply_markup=cancel_attr_kbd())
+    await EditState.message.set()
 
 
 @dp.message_handler(commands='ename', state=EditState.confirm)
@@ -480,7 +513,18 @@ async def edit_hours(message: types.Message, state: FSMContext):
     await state.update_data(attr='hours')
 
 
-@dp.callback_query_handler(text='cancel_attr', state=EditState.attr)
+@dp.message_handler(commands='delete', state=EditState.confirm)
+async def delete_poi_prompt(message: types.Message, state: FSMContext):
+    info = await get_user(message.from_user)
+    if not info.is_moderator():
+        await message.answer(config.MSG['editor']['cant_delete'])
+        return
+    await message.answer(config.MSG['editor']['delete'], reply_markup=cancel_attr_kbd())
+    await EditState.attr.set()
+    await state.update_data(attr='delete')
+
+
+@dp.callback_query_handler(text='cancel_attr', state=EditState.all_states)
 async def cancel_attr(query: types.CallbackQuery, state: FSMContext):
     await EditState.confirm.set()
     await print_edit_options(query.from_user, state)
@@ -559,6 +603,18 @@ def parse_link(value):
     return parts
 
 
+async def do_delete(user, poi: POI, reason: str, state: FSMContext):
+    info = await get_user(user)
+    if not info.is_moderator():
+        await bot.send_message(user.id, config.MSG['editor']['cant_delete'])
+        return
+
+    await db.delete_poi(user.id, poi, reason)
+    await state.finish()
+    await bot.send_message(user.id, config.MSG['editor']['deleted'],
+                           reply_markup=get_buttons())
+
+
 @dp.message_handler(state=EditState.attr)
 async def store_attr(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -634,6 +690,8 @@ async def store_attr(message: types.Message, state: FSMContext):
                             l[1] = parts[1]
                     if not found:
                         poi.links.append(parts)
+    elif attr == 'delete':
+        await do_delete(message.from_user, poi, value, state)
     else:
         await message.answer(f'Атрибут {attr} пока не редактируем.')
 
@@ -642,25 +700,15 @@ async def store_attr(message: types.Message, state: FSMContext):
     await print_edit_options(message.from_user, state)
 
 
-@dp.message_handler(commands='delete', state=EditState.confirm)
-async def delete_poi(message: types.Message, state: FSMContext):
-    info = await get_user(message.from_user)
-    if not info.is_moderator():
-        await message.answer(config.MSG['editor']['cant_delete'])
-        return
-
-    poi = (await state.get_data())['poi']
-    await db.delete_poi(message.from_user.id, poi)
-    await state.finish()
-    await message.answer(config.MSG['editor']['deleted'], reply_markup=get_buttons())
-
-
 @dp.message_handler(state=EditState.confirm)
-async def print_edit_again(message: types.Message, state: FSMContext):
+async def other_msg(message: types.Message, state: FSMContext):
+    await message.answer('Нажмите на любую команду из списка выше, '
+                         'или /msg для связи с модератором.')
+
+
+@dp.message_handler(state=EditState.message)
+async def send_message(message: types.Message, state: FSMContext):
     user = await get_user(message.from_user)
-    if user.is_moderator():
-        await message.answer('Вы же модератор, сделайте сами!')
-        return
     poi = (await state.get_data())['poi']
     if poi.id is None:
         # Won't add an abstract message to the queue

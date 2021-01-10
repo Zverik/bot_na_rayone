@@ -1,5 +1,5 @@
 from raybot import config
-from raybot.model import db, UserInfo
+from raybot.model import db, UserInfo, Location
 from aiogram import types
 from typing import List
 import re
@@ -50,6 +50,12 @@ async def get_user(user: types.User):
     return info
 
 
+async def save_location(message: types.Message):
+    location = Location(message.location.longitude, message.location.latitude)
+    info = await get_user(message.from_user)
+    info.location = location
+
+
 def prune_users(except_id: int) -> List[int]:
     pruned = []
     for user_id in list(userdata.keys()):
@@ -98,3 +104,9 @@ def pack_ids(ids: List[int]) -> str:
 def unpack_ids(s: str) -> List[int]:
     b = base64.a85decode(s.encode())
     return list(struct.unpack('h' * (len(b) // 2), b))
+
+
+def uncap(s: str) -> str:
+    if not s:
+        return s
+    return s[0].lower() + s[1:]

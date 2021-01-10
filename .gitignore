@@ -10,3 +10,5 @@ photo*/
 tiles/
 Pipfile.lock
 __pycache__/
+scripts/
+*.geojson

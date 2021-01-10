@@ -1,7 +1,7 @@
 from raybot import config
-from raybot.model import db, POI
+from raybot.model import db, POI, Location
 from raybot.bot import bot
-from raybot.util import h, get_user, get_map, pack_ids
+from raybot.util import h, get_user, get_map, pack_ids, uncap
 import re
 import os
 import random
@@ -26,25 +26,22 @@ class PoiState(StatesGroup):
 
 
 async def print_poi_list(user: types.User, query: str, pois: List[POI],
-                         full: bool = False, shuffle: bool = True):
-    def uncap(s: str) -> str:
-        if not s:
-            return s
-        return s[0].lower() + s[1:]
-
+                         full: bool = False, shuffle: bool = True,
+                         relative_to: Location = None):
     max_buttons = 9 if not full else 20
-    location = (await get_user(user)).location
+    location = (await get_user(user)).location or relative_to
     if shuffle:
         if location:
             pois.sort(key=lambda p: location.distance(p.location))
         else:
             random.shuffle(pois)
-        pois.sort(key=lambda p: not p.hours or p.hours.is_open())
+        pois.sort(key=lambda p: bool(p.hours) and not p.hours.is_open())
     total_count = len(pois)
     all_ids = pack_ids([p.id for p in pois])
     if total_count > max_buttons:
         pois = pois[:max_buttons if full else max_buttons - 1]
 
+    # Build the message
     content = config.MSG['poi_list'].replace('%s', query) + '\n'
     for i, poi in enumerate(pois, 1):
         if poi.description:
@@ -53,10 +50,11 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             content += h(f'\n{i}. {poi.name}')
     if total_count > max_buttons:
         if not full:
-            content += config.MSG['poi_not_full'].format(total_count=total_count)
+            content += '\n\n' + config.MSG['poi_not_full'].format(total_count=total_count)
         else:
-            content += config.MSG['poi_too_many'].format(total_count=total_count)
+            content += '\n\n' + config.MSG['poi_too_many'].format(total_count=total_count)
 
+    # Prepare the inline keyboard
     if len(pois) == 4:
         kbd_width = 2
     else:
@@ -75,6 +73,7 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
         kbd.insert(types.InlineKeyboardButton(
             f'Все {total_count}', callback_data=callback_data))
 
+    # Make a map and send the message
     map_file = get_map([poi.location for poi in pois], ref=location)
     if not map_file:
         await bot.send_message(user.id, content, parse_mode=HTML, reply_markup=kbd)
@@ -125,8 +124,9 @@ def describe_poi(poi: POI):
             ['<a href="{}">{}</a>'.format(h(link[1]), h(link[0]))
              for link in poi.links]
         )))
-    if poi.address:
-        part2.append(f'🏠 {poi.address}.')
+    if poi.house_name or poi.address_part:
+        address = ', '.join([s for s in (poi.house_name, uncap(poi.address_part)) if s])
+        part2.append(f'🏠 {address}.')
     if poi.has_wifi is True:
         part2.append('📶 Есть бесплатный Wi-Fi.')
     if poi.accepts_cards is True:

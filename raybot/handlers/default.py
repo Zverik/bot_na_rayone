@@ -1,6 +1,6 @@
 from raybot import config
 from raybot.model import db, Location
-from raybot.bot import dp, bot
+from raybot.bot import dp
 from raybot.util import split_tokens, has_keyword, get_user, h, HTML, get_buttons, prune_users
 from raybot.actions.addr import test_address
 from raybot.actions.poi import PoiState, print_poi, print_poi_list
@@ -8,7 +8,6 @@ from raybot.actions.messages import process_reply
 import os
 import csv
 import logging
-from asyncio import sleep
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 
@@ -49,9 +48,8 @@ async def process(message: types.Message, state: FSMContext):
         return
     for user_id in prune_users(message.from_user.id):
         await state.storage.finish(user=user_id)
-        # await bot.send_message(user_id, config.MSG['home'], disable_notification=True,
-        #                        reply_markup=get_buttons())
-        # await sleep(0.3)
+        # We used to send a message here, but "disable_notification" only
+        # disables a buzz, not an unread notification.
 
     tokens = split_tokens(message.text)
     if not tokens:
@@ -72,7 +70,8 @@ async def process(message: types.Message, state: FSMContext):
         return
 
     # Finally check keywords
-    pois = await db.find_poi(' '.join(tokens))
+    query = ' '.join(tokens)
+    pois = await db.find_poi(query)
     if len(pois) == 1:
         write_search_log(message, tokens, f'poi {pois[0].id}')
         await PoiState.poi.set()
@@ -80,6 +79,8 @@ async def process(message: types.Message, state: FSMContext):
         await print_poi(message.from_user, pois[0])
     elif len(pois) > 1:
         write_search_log(message, tokens, f'{len(pois)} results')
+        await PoiState.poi_list.set()
+        await state.set_data({'query': query, 'poi': [p.id for p in pois]})
         await print_poi_list(message.from_user, message.text, pois)
     else:
         write_search_log(message, tokens, 'not found')
