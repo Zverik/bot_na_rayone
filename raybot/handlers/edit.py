@@ -243,7 +243,7 @@ def boolean_kbd(attr: str):
 
 
 def tag_kbd(page: int = 1):
-    ROWS = 4
+    ROWS = 5
     tags = config.TAGS['suggest_tags']
     kbd = types.InlineKeyboardMarkup(row_width=3)
     if (page - 1) * ROWS * 3 >= len(tags):
@@ -515,10 +515,6 @@ async def edit_hours(message: types.Message, state: FSMContext):
 
 @dp.message_handler(commands='delete', state=EditState.confirm)
 async def delete_poi_prompt(message: types.Message, state: FSMContext):
-    info = await get_user(message.from_user)
-    if not info.is_moderator():
-        await message.answer(config.MSG['editor']['cant_delete'])
-        return
     await message.answer(config.MSG['editor']['delete'], reply_markup=cancel_attr_kbd())
     await EditState.attr.set()
     await state.update_data(attr='delete')
@@ -603,18 +599,6 @@ def parse_link(value):
     return parts
 
 
-async def do_delete(user, poi: POI, reason: str, state: FSMContext):
-    info = await get_user(user)
-    if not info.is_moderator():
-        await bot.send_message(user.id, config.MSG['editor']['cant_delete'])
-        return
-
-    await db.delete_poi(user.id, poi, reason)
-    await state.finish()
-    await bot.send_message(user.id, config.MSG['editor']['deleted'],
-                           reply_markup=get_buttons())
-
-
 @dp.message_handler(state=EditState.attr)
 async def store_attr(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -691,7 +675,10 @@ async def store_attr(message: types.Message, state: FSMContext):
                     if not found:
                         poi.links.append(parts)
     elif attr == 'delete':
-        await do_delete(message.from_user, poi, value, state)
+        await db.delete_poi(message.from_user.id, poi, value)
+        await state.finish()
+        await message.answer(config.MSG['editor']['deleted'], reply_markup=get_buttons())
+        return
     else:
         await message.answer(f'Атрибут {attr} пока не редактируем.')
 

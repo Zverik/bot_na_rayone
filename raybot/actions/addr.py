@@ -19,6 +19,8 @@ class AddrState(StatesGroup):
 
 
 async def test_address(message: types.Message, tokens: List[str], state: FSMContext) -> bool:
+    if 'streets' not in config.ADDR:
+        return False
     for street in config.ADDR['streets']:
         if has_keyword(tokens[:1], street['keywords']):
             if len(tokens) == 1:
@@ -54,7 +56,9 @@ async def handle_building(user: types.User, street, tokens, state, hid=None):
     if hid:
         await AddrState.house.set()
         await state.set_data({'house': hid})
-        if len(tokens) > 1:
+        if 'apartments' not in config.ADDR:
+            await print_poi_by_key(user, hid, buttons=False)
+        elif len(tokens) > 1:
             await print_apartment(user, hid, tokens[1])
         else:
             await print_poi_by_key(user, hid, buttons=False,
@@ -67,6 +71,10 @@ async def handle_building(user: types.User, street, tokens, state, hid=None):
 
 
 async def print_apartment(user: types.User, building: str, apartment):
+    if 'apartments' not in config.ADDR:
+        await print_poi_by_key(user, building, buttons=False)
+        return
+
     try:
         apartment = int(apartment)
     except ValueError:

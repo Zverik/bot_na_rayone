@@ -59,6 +59,13 @@ async def get_poi_by_house(house: str) -> POI:
     return [POI(r) async for r in cursor]
 
 
+async def get_poi_by_tag(tag: str) -> POI:
+    query = "select * from poi where tag = ? and delete_reason is null"
+    db = await get_db()
+    cursor = await db.execute(query, (tag,))
+    return [POI(r) async for r in cursor]
+
+
 async def get_poi_by_key(str_id: str) -> POI:
     query = "select * from poi where str_id = ?"
     db = await get_db()

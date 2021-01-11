@@ -15,6 +15,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 HTML = types.ParseMode.HTML
 POI_LIST_CB = CallbackData('poi', 'id')
 POI_LOCATION_CB = CallbackData('poiloc', 'id')
+POI_SIMILAR_CB = CallbackData('similar', 'id')
 POI_EDIT_CB = CallbackData('poiedit', 'id')
 POI_FULL_CB = CallbackData('plst', 'query', 'ids')
 POI_HOUSE_CB = CallbackData('poih', 'house')
@@ -160,6 +161,10 @@ def make_poi_keyboard(poi: POI):
         kbd.insert(types.InlineKeyboardButton(link_title, url=link))
     kbd.insert(types.InlineKeyboardButton(
         '📍 Координаты', callback_data=POI_LOCATION_CB.new(id=poi.id)))
+    if poi.tag and poi.tag not in ('building', 'entrance'):
+        emoji = config.TAGS['emoji'].get(poi.tag, config.TAGS['emoji']['default'])
+        kbd.insert(types.InlineKeyboardButton(
+            emoji + ' Похожие', callback_data=POI_SIMILAR_CB.new(id=poi.id)))
     kbd.insert(types.InlineKeyboardButton(
         '📝 Поправить', callback_data=POI_EDIT_CB.new(id=poi.id)))
     return kbd

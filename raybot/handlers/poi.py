@@ -1,11 +1,12 @@
 from raybot.actions.poi import (
     PoiState,
     print_poi, print_poi_list,
-    POI_LIST_CB, POI_FULL_CB, POI_LOCATION_CB, POI_HOUSE_CB
+    POI_LIST_CB, POI_FULL_CB, POI_LOCATION_CB, POI_HOUSE_CB, POI_SIMILAR_CB
 )
 from raybot.model import db
 from raybot.bot import dp, bot
 from raybot.util import split_tokens, unpack_ids, save_location
+from raybot import config
 from typing import Dict
 from aiogram import types
 from aiogram.dispatcher import FSMContext, filters
@@ -76,6 +77,24 @@ async def in_house_callback(query: types.CallbackQuery, callback_data: Dict[str,
         await PoiState.poi_list.set()
         await state.set_data({'query': query, 'poi': [p.id for p in pois]})
         await print_poi_list(query.from_user, data.name, pois, True)
+
+
+@dp.callback_query_handler(POI_SIMILAR_CB.filter(), state='*')
+async def simlar_poi(query: types.CallbackQuery, callback_data: Dict[str, str],
+                     state: FSMContext):
+    poi = await db.get_poi_by_id(int(callback_data['id']))
+    if not poi or not poi.tag:
+        await query.answer('Что-то пошло не так — повторите запрос, пожалуйста.')
+    else:
+        pois = await db.get_poi_by_tag(poi.tag)
+        if len(pois) == 1:
+            await query.answer('Нет похожих заведений')
+        else:
+            tag_names = config.TAGS['tags'].get(poi.tag)
+            pquery = poi.tag if not tag_names else tag_names[0]
+            await PoiState.poi_list.set()
+            await state.set_data({'query': pquery, 'poi': [p.id for p in pois]})
+            await print_poi_list(query.from_user, pquery, pois, relative_to=poi.location)
 
 
 @dp.message_handler(commands='last', state='*')
