@@ -5,3 +5,5 @@ telegram_token: '1234567890:AAFEsdkjfhweiufheiufheirhufiuhfsdfs'
 admin_id: 2345678912
 # Path to logs, must be writable by the bot
 logs: /var/log/raybot
+# Set to true to make the POI database read-only
+maintenance: false
