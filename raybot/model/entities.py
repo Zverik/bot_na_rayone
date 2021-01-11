@@ -46,6 +46,7 @@ class POI:
     house: str = None
     house_name: str = None
     tag: str = None
+    delete_reason: str = None
 
     def __init__(self, row=None, name=None, location=None, keywords=None):
         if row:
@@ -72,6 +73,7 @@ class POI:
             self.accepts_cards = None if row['accepts_cards'] is None else row['accepts_cards'] == 1
             self.tag = row['tag']
             self.needs_check = row['needs_check'] == 1
+            self.delete_reason = row['delete_reason']
         else:
             self.id = None
             self.name = name

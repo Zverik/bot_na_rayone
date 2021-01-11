@@ -205,8 +205,12 @@ async def print_edit_options(user: types.User, state: FSMContext, comment=None):
     else:
         photos = 'нет'
     lines.append(f'<b>Фотографии:</b> {photos} (залейте замену или /ephoto для просмотра)')
-    lines.append('🗑️ Удалить: /delete')
-    lines.append('✉️ Написать модераторам: /msg')
+    if poi.id:
+        if poi.delete_reason:
+            lines.append(f'<b>Удалено:</b> {format(poi.delete_reason)}. Восстановить: /undelete')
+        else:
+            lines.append('🗑️ Удалить: /delete')
+        lines.append('✉️ Написать модераторам: /msg')
 
     content = '\n'.join(lines)
     if comment is None:
@@ -520,6 +524,18 @@ async def delete_poi_prompt(message: types.Message, state: FSMContext):
     await state.update_data(attr='delete')
 
 
+@dp.message_handler(commands='undelete', state=EditState.confirm)
+async def undelete_poi(message: types.Message, state: FSMContext):
+    user = await get_user(message.from_user)
+    if not user.is_moderator():
+        await message.answer(config.MSG['editor']['cant_restore'])
+        return
+    poi = (await state.get_data())['poi']
+    await db.restore_poi(message.from_user.id, poi)
+    await state.finish()
+    await message.answer(config.MSG['editor']['restored'], reply_markup=get_buttons())
+
+
 @dp.callback_query_handler(text='cancel_attr', state=EditState.all_states)
 async def cancel_attr(query: types.CallbackQuery, state: FSMContext):
     await EditState.confirm.set()
@@ -678,6 +694,8 @@ async def store_attr(message: types.Message, state: FSMContext):
         await db.delete_poi(message.from_user.id, poi, value)
         await state.finish()
         await message.answer(config.MSG['editor']['deleted'], reply_markup=get_buttons())
+        await broadcast_str(f'Только что удалили заведение /poi{poi.id}: {value}',
+                            message.from_user.id)
         return
     else:
         await message.answer(f'Атрибут {attr} пока не редактируем.')

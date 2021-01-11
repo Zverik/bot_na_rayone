@@ -210,6 +210,9 @@ async def manage_mods(message: types.Message, state: FSMContext):
 @dp.message_handler(commands='deleted', state='*')
 async def print_deleted(message: types.Message, state: FSMContext):
     pois = await db.get_last_deleted(6)
+    if not pois:
+        await message.answer('Ничего не удалено.')
+        return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
     await print_poi_list(message.from_user, 'last', pois, shuffle=False)
