@@ -1,0 +1,1 @@
+-e git+git://github.com/Zverik/humanized_opening_hours.git#egg=osm-humanized-opening-hours
