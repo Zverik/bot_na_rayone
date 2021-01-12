@@ -1,4 +1,7 @@
 import os
+import hashlib
+from collections import defaultdict
+from PIL import Image
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
@@ -15,6 +18,7 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 MSG_CB = CallbackData('qmsg', 'action', 'id')
 POI_VALIDATE_CB = CallbackData('qpoi', 'id')
 MOD_REMOVE_CB = CallbackData('modrm', 'id')
+ADMIN_CB = CallbackData('admin', 'action')
 
 
 class ModState(StatesGroup):
@@ -183,10 +187,7 @@ async def remove_mod(query: types.CallbackQuery, callback_data: Dict[str, str],
         await query.answer('Ок')
 
 
-@dp.message_handler(commands='mod', state='*')
-async def manage_mods(message: types.Message, state: FSMContext):
-    if message.from_user.id != config.ADMIN:
-        raise SkipHandler
+async def manage_mods(user: types.User, state: FSMContext):
     await state.finish()
     mods = await db.get_role_users('moderator')
     kbd = types.InlineKeyboardMarkup()
@@ -203,7 +204,7 @@ async def manage_mods(message: types.Message, state: FSMContext):
                     'форвардните пост от нового человека, чтобы сделать её/его модератором.')
     kbd.insert(types.InlineKeyboardButton(
         'Оставить как есть', callback_data=MOD_REMOVE_CB.new(id='-')))
-    await message.answer(content, reply_markup=kbd)
+    await bot.send_message(user.id, content, reply_markup=kbd)
     await ModState.mod.set()
 
 
@@ -215,4 +216,104 @@ async def print_deleted(message: types.Message, state: FSMContext):
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
-    await print_poi_list(message.from_user, 'last', pois, shuffle=False)
+    await print_poi_list(message.from_user, 'deleted', pois, shuffle=False)
+
+
+async def print_missing_value(user: types.User, k: str, state: FSMContext):
+    pois = await db.poi_with_empty_value(k, k != 'house')
+    if not pois:
+        await bot.send_message(user.id, 'Нет таких.')
+        return
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
+    await print_poi_list(user, f'empty {k}', pois, shuffle=False)
+
+
+async def dedup_photos():
+    def hashall(photos):
+        result = defaultdict(list)
+        for photo in photos:
+            path = os.path.join(config.PHOTOS, photo + '.jpg')
+            image = Image.open(path)
+            h = hashlib.md5()
+            h.update(image.tobytes())
+            result[h.digest()].append(photo)
+        return result
+
+    conn = await db.get_db()
+    cursor = await conn.execute("select id, photo_out, photo_in from poi order by id")
+    photos = set()
+    refs = {}
+    async for row in cursor:
+        for i in ('photo_out', 'photo_in'):
+            if row[i]:
+                photos.add(row[i])
+                refs[(row[i], i)] = row['id']
+
+    # Find sizes
+    sizes = defaultdict(list)
+    for photo in photos:
+        path = os.path.join(config.PHOTOS, photo + '.jpg')
+        if os.path.exists(path):
+            sizes[os.path.getsize(path)].append(photo)
+
+    # Remove duplicates
+    removed = 0
+    hashes = hashall(sum(sizes.values(), []))
+    for s, ph in hashes.items():
+        if len(ph) > 1:
+            for k in ('photo_out', 'photo_in'):
+                ids = [refs[p, k] for p in ph[1:] if (p, k) in refs]
+                await conn.execute("update poi set {} = ? where id in ({})".format(
+                    k, ','.join('?' * len(ids))), (ph[0], *ids))
+            for photo in ph[1:]:
+                path = os.path.join(config.PHOTOS, photo + '.jpg')
+                os.remove(path)
+                removed += 1
+    await conn.commit()
+    return removed
+
+
+@dp.message_handler(commands='admin', state='*')
+async def admin_info(message: types.Message):
+    if message.from_user.id != config.ADMIN:
+        raise SkipHandler
+    kbd = types.InlineKeyboardMarkup(row_width=2)
+    kbd.insert(types.InlineKeyboardButton('Модераторы',
+                                          callback_data=ADMIN_CB.new(action='mod')))
+    kbd.insert(types.InlineKeyboardButton('Перестроить индекс',
+                                          callback_data=ADMIN_CB.new(action='reindex')))
+    kbd.insert(types.InlineKeyboardButton('Дедубл. фото',
+                                          callback_data=ADMIN_CB.new(action='dedup')))
+    kbd.row(
+        types.InlineKeyboardButton('Нет адреса', callback_data=ADMIN_CB.new(action='mis-house')),
+        types.InlineKeyboardButton('Нет фото', callback_data=ADMIN_CB.new(action='mis-photo')),
+        types.InlineKeyboardButton('Нет тега', callback_data=ADMIN_CB.new(action='mis-tag')),
+    )
+    await message.answer('Привет, админ! Нажми что-нибудь.', reply_markup=kbd)
+
+
+@dp.callback_query_handler(ADMIN_CB.filter(), state='*')
+async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str],
+                        state: FSMContext):
+    user = query.from_user
+    if user.id != config.ADMIN:
+        raise SkipHandler
+    action = callback_data['action']
+    if action == 'mod':
+        await manage_mods(user, state)
+        return
+    elif action == 'reindex':
+        await db.reindex()
+        await bot.send_message(user.id, 'Поисковый индекс перестроен.')
+    elif action == 'dedup':
+        cnt = await dedup_photos(user)
+        await bot.send_message(f'Удалили {cnt} дубликатов фото.')
+    elif action == 'mis-house':
+        await print_missing_value(user, 'house', state)
+    elif action == 'mis-photo':
+        await print_missing_value(user, 'photo_out', state)
+    elif action == 'mis-tag':
+        await print_missing_value(user, 'tag', state)
+    else:
+        await query.answer(f'Неизвестный action: {action}')

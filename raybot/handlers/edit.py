@@ -732,6 +732,8 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
     user = await get_user(query.from_user)
     if not user.is_moderator() and poi.id is None:
         poi.needs_check = True
+        await broadcast_str(f'Только что добавили заведение /poi{poi.id}: "{poi.name}"',
+                            query.from_user.id)
 
     # Send the POI to the database
     poi_id = poi.id

@@ -3,7 +3,6 @@ import datetime
 import asyncio
 import sys
 from raybot.model import db
-from raybot.cli.reindex import reindex
 
 
 async def do_import(data):
@@ -68,8 +67,8 @@ async def do_import(data):
         ?, ?,
         ?, ?, ?
     )""", values)
-    await reindex(conn)
     await conn.commit()
+    await db.reindex()
     await conn.close()
 
 

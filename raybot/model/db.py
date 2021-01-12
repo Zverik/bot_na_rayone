@@ -84,6 +84,19 @@ async def find_poi(keywords: str) -> List[POI]:
     return [POI(r) async for r in cursor]
 
 
+async def poi_with_empty_value(field: str, buildings: bool = False) -> List[POI]:
+    no_buildings = "and (poi.tag is null or poi.tag != 'building') "
+    query = ("select poi.*, h.name as h_address from poi "
+             "left join poi h on h.str_id = poi.house "
+             "where poi.in_index and poi.delete_reason is null "
+             "{b}"
+             "and poi.{k} is null order by updated desc".format(
+                 k=field, b='' if buildings else no_buildings))
+    db = await get_db()
+    cursor = await db.execute(query)
+    return [POI(r) async for r in cursor]
+
+
 async def get_roles(user_id: int) -> List[str]:
     query = "select role from roles where user_id = ?"
     db = await get_db()
@@ -176,7 +189,8 @@ async def insert_poi(user_id: int, poi: POI):
     # Now update the search index
     tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
     query2 = ("insert into poisearch (docid, name, keywords, tag) "
-              "select rowid, replace(name, 'ё', 'е') as name, keywords, ? "
+              "select rowid, replace(replace(name, 'Ё', 'Е'), 'ё', 'е') as name, "
+              "  replace(keywords, 'ё', 'е') as keywords, ? "
               "from poi where id = ?")
     await db.execute(query2, (tagkw, rowid))
     await db.commit()
@@ -198,7 +212,9 @@ async def update_poi(user_id: int, poi: POI):
         tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
         query2 = ("update poisearch set keywords = ?, name = ?, "
                   "tag = ? where docid = ?")
-        await db.execute(query2, (poi.keywords, poi.name, tagkw, poi.id))
+        kw = None if not poi.keywords else poi.keywords.lower().replace('ё', 'е')
+        await db.execute(query2, (kw, poi.name.replace('Ё', 'Е').replace('ё', 'е'),
+                                  tagkw, poi.id))
     await db.commit()
     return poi.id
 
@@ -223,7 +239,9 @@ async def restore_poi(user_id: int, poi: POI):
                      "where id = ?", (poi.id, ))
     tagkw = ' '.join(config.TAGS['tags'].get(poi.tag, [])) or None
     query2 = "insert into poisearch (keywords, name, tag, docid) values (?, ?, ?, ?)"
-    await db.execute(query2, (poi.keywords, poi.name, tagkw, poi.id))
+    kw = None if not poi.keywords else poi.keywords.lower().replace('ё', 'е')
+    await db.execute(query2, (kw, poi.name.replace('Ё', 'Е').replace('ё', 'е'),
+                              tagkw, poi.id))
     await db.commit()
 
 
@@ -298,8 +316,8 @@ async def apply_queue(user_id: int, q: QueueMessage):
     query = ("insert into poi_audit (user_id, approved_by, poi_id, field, "
              "old_value, new_value) values (?, ?, ?, ?, ?, ?)")
     if q.field == 'keywords':
-        query2 = ("update poisearch set keywords = (select keywords from poi where id = ?) "
-                  "where docid = ?")
+        query2 = ("update poisearch set keywords = (select replace(keywords, 'ё', 'е') "
+                  "from poi where id = ?) where docid = ?")
         await db.execute(query2, (q.poi_id, q.poi_id))
     elif q.field == 'tag':
         tagkw = ' '.join(config.TAGS['tags'].get(q.new_value, [])) or None
@@ -370,3 +388,21 @@ async def get_stats():
         'pois': row['cnt_poi'],
     }
     return stats
+
+
+async def reindex():
+    conn = await get_db()
+    await conn.execute("delete from poisearch")
+    # Create temporary tag table
+    await conn.execute("create table tag_keywords (tag text not null, tagkw text not null)")
+    await conn.executemany("insert into tag_keywords (tag, tagkw) values (?, ?)",
+                           [(k, ' '.join(v)) for k, v in config.TAGS['tags'].items()])
+    await conn.execute(
+        "insert into poisearch (docid, name, keywords, tag) "
+        "select poi.rowid, replace(replace(name, 'Ё', 'Е'), 'ё', 'е') as name, "
+        "  replace(keywords, 'ё', 'е') as keywords, tagkw as tag from poi "
+        "left join tag_keywords on poi.tag = tag_keywords.tag "
+        "where in_index and delete_reason is null"
+    )
+    await conn.execute("drop table tag_keywords")
+    await conn.commit()

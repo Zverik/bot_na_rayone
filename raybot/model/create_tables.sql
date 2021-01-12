@@ -6,7 +6,7 @@ create table poi (
   lat float not null,
   created timestamp not null default current_timestamp,
   updated timestamp not null default current_timestamp,
-  needs_check boolean not null default false,
+  needs_check boolean not null default 0,
   description text,
   keywords text, -- same as in poisearch table (see below)
   photo_out text,
@@ -19,7 +19,7 @@ create table poi (
   phones text, -- semicolon-separated
   comment text,
   address text,
-  in_index boolean not null default true,
+  in_index boolean not null default 1,
   house text, -- reference to a poi / str_id
   delete_reason text
 );
@@ -58,6 +58,7 @@ create table roles (
     added_by text,
     added_on timestamp not null default current_timestamp
 );
+create index roles_user_idx on roles (user_id);
 
 create table updates (
     id integer primary key,
