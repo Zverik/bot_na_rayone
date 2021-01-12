@@ -72,7 +72,7 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             # Too long
             callback_data = POI_FULL_CB.new(query=query[:55], ids='-')
         kbd.insert(types.InlineKeyboardButton(
-            f'Все {total_count}', callback_data=callback_data))
+            f'🔽 Все {total_count}', callback_data=callback_data))
 
     # Make a map and send the message
     map_file = get_map([poi.location for poi in pois], ref=location)
