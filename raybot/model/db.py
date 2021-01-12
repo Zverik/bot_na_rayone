@@ -230,6 +230,14 @@ async def delete_poi(user_id: int, poi: POI, reason: str):
     await db.commit()
 
 
+async def delete_poi_forever(user_id: int, poi: POI):
+    db = await get_db()
+    save_audit(user_id, user_id, poi, None)
+    await db.execute("delete from poisearch where docid = ?", (poi.id,))
+    await db.execute("delete from poi where id = ?", (poi.id,))
+    await db.commit()
+
+
 async def restore_poi(user_id: int, poi: POI):
     db = await get_db()
     query = ("insert into poi_audit (user_id, approved_by, poi_id, field, "
@@ -372,21 +380,15 @@ async def get_random_poi(count: int = 10):
 
 
 async def get_stats():
+    stats = {}
     db = await get_db()
-    query = """\
-        select count(*) filter (where tag = 'building') as cnt_house,
-            count(*) filter (where tag = 'entrance') as cnt_entrance,
-            count(*) filter (where delete_reason is null and (tag is null or
-                tag not in ('building', 'entrance'))) as cnt_poi
-        from poi
-    """
-    cursor = await db.execute(query)
-    row = await cursor.fetchone()
-    stats = {
-        'buildings': row['cnt_house'],
-        'entrances': row['cnt_entrance'],
-        'pois': row['cnt_poi'],
-    }
+    cursor = await db.execute("select count(*) from poi where tag = 'building'")
+    stats['buildings'] = (await cursor.fetchone())[0]
+    cursor = await db.execute("select count(*) from poi where tag = 'entrance'")
+    stats['entrances'] = (await cursor.fetchone())[0]
+    cursor = await db.execute("select count(*) from poi where delete_reason is null "
+                              "and (tag is null or tag not in ('building', 'entrance'))")
+    stats['pois'] = (await cursor.fetchone())[0]
     return stats
 
 

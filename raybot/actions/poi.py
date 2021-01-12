@@ -100,7 +100,8 @@ def relative_day(next_day):
 
 
 def describe_poi(poi: POI):
-    result = [f'<b>{h(poi.name)}</b>']
+    deleted = None if not poi.delete_reason else ' 🗑️'
+    result = [f'<b>{h(poi.name)}</b>{deleted}']
     if poi.description:
         result.append(h(poi.description))
 

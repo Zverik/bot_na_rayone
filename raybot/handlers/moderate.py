@@ -45,7 +45,7 @@ async def print_next_added(user: types.User):
     content = config.MSG['queue']['new_poi']
     kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
-            config.MSG['queue']['apply'],
+            config.MSG['queue']['validated'],
             callback_data=POI_VALIDATE_CB.new(id=str(poi.id))
         )
     )
@@ -59,7 +59,7 @@ async def validate_poi(query: types.CallbackQuery, callback_data: Dict[str, str]
         await query.answer('POI пропал, странно.')
         return
     await db.validate_poi(poi.id)
-    await query.answer('Заведение проверено.')
+    await query.answer(config.MSG['queue']['validated_ok'])
     await print_next_queued(query.from_user)
 
 
@@ -70,8 +70,9 @@ async def print_next_queued(user: types.User):
 
     queue = await db.get_queue(1)
     if not queue:
+        # This is done inside print_next_added()
         # await bot.send_message(user.id, config.MSG['queue']['empty'])
-        return await print_next_added(user)
+        await print_next_added(user)
         return True
 
     q = queue[0]

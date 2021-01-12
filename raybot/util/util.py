@@ -20,6 +20,12 @@ def reverse_synonims():
     for k, v in config.MSG['synonims'].items():
         for s in v:
             result[s] = k
+    # Add emoji from tags
+    for k, v in config.TAGS['emoji'].items():
+        if k != 'default' and v not in result:
+            kw = config.TAGS['tags'].get(k)
+            if kw:
+                result[v] = kw[0]
     return result
 
 

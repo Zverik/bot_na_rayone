@@ -519,9 +519,19 @@ async def edit_hours(message: types.Message, state: FSMContext):
 
 @dp.message_handler(commands='delete', state=EditState.confirm)
 async def delete_poi_prompt(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['delete'], reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='delete')
+    poi = (await state.get_data())['poi']
+    if poi.delete_reason:
+        user = await get_user(message.from_user)
+        if not user.is_moderator():
+            await message.answer('Нельзя удалить заведение дважды.')
+        else:
+            await db.delete_poi_forever(user.id, poi)
+            await state.finish()
+            await message.answer(config.MSG['editor']['deleted2'], reply_markup=get_buttons())
+    else:
+        await message.answer(config.MSG['editor']['delete'], reply_markup=cancel_attr_kbd())
+        await EditState.attr.set()
+        await state.update_data(attr='delete')
 
 
 @dp.message_handler(commands='undelete', state=EditState.confirm)
@@ -732,8 +742,6 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
     user = await get_user(query.from_user)
     if not user.is_moderator() and poi.id is None:
         poi.needs_check = True
-        await broadcast_str(f'Только что добавили заведение /poi{poi.id}: "{poi.name}"',
-                            query.from_user.id)
 
     # Send the POI to the database
     poi_id = poi.id
@@ -741,6 +749,9 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
         if user.is_moderator() or poi.id is None:
             poi_id = await db.insert_poi(query.from_user.id, poi)
             saved = 'saved'
+            if not user.is_moderator():
+                await broadcast_str(f'Только что добавили заведение /poi{poi_id}: "{poi.name}"',
+                                    query.from_user.id)
         else:
             await db.add_to_queue(user, poi)
             await broadcast_str(config.MSG['queue']['added'])
