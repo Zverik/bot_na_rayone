@@ -100,7 +100,7 @@ def relative_day(next_day):
 
 
 def describe_poi(poi: POI):
-    deleted = None if not poi.delete_reason else ' 🗑️'
+    deleted = '' if not poi.delete_reason else ' 🗑️'
     result = [f'<b>{h(poi.name)}</b>{deleted}']
     if poi.description:
         result.append(h(poi.description))
@@ -159,7 +159,7 @@ def make_poi_keyboard(poi: POI):
         else:
             link_title = poi.links[0][0]
             link = poi.links[0][1]
-        kbd.insert(types.InlineKeyboardButton(link_title, url=link))
+        kbd.insert(types.InlineKeyboardButton('🌐 ' + link_title, url=link))
     kbd.insert(types.InlineKeyboardButton(
         '📍 Координаты', callback_data=POI_LOCATION_CB.new(id=poi.id)))
     if poi.tag and poi.tag not in ('building', 'entrance'):

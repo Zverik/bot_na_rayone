@@ -256,8 +256,8 @@ def tag_kbd(page: int = 1):
         kbd.insert(types.InlineKeyboardButton(config.TAGS['tags'].get(tag, [tag])[0],
                                               callback_data=TAG_CB.new(tag=tag)))
     kbd.add(
-        types.InlineKeyboardButton('⏭️ Ещё', callback_data=TAG_PAGE_CB.new(page=str(page + 1))),
-        types.InlineKeyboardButton(config.MSG['editor']['cancel'], callback_data='cancel_attr')
+        types.InlineKeyboardButton(config.MSG['editor']['cancel'], callback_data='cancel_attr'),
+        types.InlineKeyboardButton('Ещё ⏭️', callback_data=TAG_PAGE_CB.new(page=str(page + 1)))
     )
     return kbd
 
