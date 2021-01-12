@@ -16,6 +16,17 @@ from aiogram.dispatcher import FSMContext
 async def welcome(message: types.Message, state: FSMContext):
     await state.finish()
     await message.answer(config.MSG['start'].replace('\n', '\n\n'), reply_markup=get_buttons())
+    payload = message.get_args()
+    if payload:
+        try:
+            poi = await db.get_poi_by_id(int(payload))
+            await PoiState.poi.set()
+            await state.set_data({'poi': poi.id})
+            await print_poi(message.from_user, poi)
+        except ValueError:
+            tokens = split_tokens(payload)
+            if tokens:
+                await process_query(message, state, tokens)
 
 
 @dp.message_handler(commands=['help'], state='*')
@@ -70,6 +81,10 @@ async def process(message: types.Message, state: FSMContext):
         return
 
     # Finally check keywords
+    await process_query(message, state, tokens)
+
+
+async def process_query(message, state, tokens):
     query = ' '.join(tokens)
     pois = await db.find_poi(query)
     if len(pois) == 1:

@@ -2,9 +2,11 @@ from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot
 from raybot.util import h, get_user, get_map, pack_ids, uncap
+import csv
 import re
 import os
 import random
+import logging
 from typing import List
 from datetime import datetime
 from aiogram import types
@@ -184,7 +186,18 @@ async def make_house_keyboard(poi: POI):
     )
 
 
+def log_poi(poi: POI):
+    row = [datetime.now().strftime('%Y-%m-%d'), poi.id, poi.name]
+    try:
+        with open(os.path.join(config.LOGS, 'poi.log'), 'a') as f:
+            w = csv.writer(f, delimiter='\t')
+            w.writerow(row)
+    except IOError:
+        logging.warning('Failed to write log line: %s', row)
+
+
 async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bool = True):
+    log_poi(poi)
     chat_id = user.id
     content = describe_poi(poi)
     if comment:
