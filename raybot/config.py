@@ -4,11 +4,6 @@ import os
 BASE_DIR = os.path.join(os.path.dirname(__file__), '..')
 CONFIG_DIR = os.path.join(BASE_DIR, 'config')
 
-# Common paths
-DATABASE = os.path.join(BASE_DIR, 'raybot.sqlite')
-PHOTOS = os.path.join(BASE_DIR, 'photo')
-TILES = os.path.join(BASE_DIR, 'tiles')
-
 # Configuration options
 with open(os.path.join(CONFIG_DIR, 'config.yml'), 'r') as f:
     CONFIG = yaml.safe_load(f)
@@ -17,6 +12,11 @@ ADMIN = CONFIG.get('admin_id')
 LOGS = CONFIG.get('logs')
 MAINTENANCE = CONFIG.get('maintenance')
 BBOX = CONFIG.get('bbox')
+
+# Common paths
+DATABASE = CONFIG.get('database', os.path.join(BASE_DIR, 'raybot.sqlite'))
+PHOTOS = CONFIG.get('photos', os.path.join(BASE_DIR, 'photo'))
+TILES = CONFIG.get('tiles', os.path.join(BASE_DIR, 'tiles'))
 
 # Strings and lists
 with open(os.path.join(CONFIG_DIR, 'responses.yml'), 'r') as f:
