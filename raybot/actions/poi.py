@@ -50,7 +50,7 @@ def star_sort(star: Tuple[int, bool]):
 
 async def print_poi_list(user: types.User, query: str, pois: List[POI],
                          full: bool = False, shuffle: bool = True,
-                         relative_to: Location = None):
+                         relative_to: Location = None, comment: str = None):
     max_buttons = 9 if not full else 20
     location = (await get_user(user)).location or relative_to
     if shuffle:
@@ -79,6 +79,8 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             content += '\n\n' + config.MSG['poi_not_full'].format(total_count=total_count)
         else:
             content += '\n\n' + config.MSG['poi_too_many'].format(total_count=total_count)
+    if comment:
+        content += '\n\n' + comment
 
     # Prepare the inline keyboard
     if len(pois) == 4:
@@ -114,8 +116,8 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
 def relative_day(next_day):
     days = (next_day.date() - datetime.now().date()).days
     if days < 1:
-        opens_day = 'утром'
-    if days == 1:
+        opens_day = ''
+    elif days == 1:
         opens_day = 'завтра'
     else:
         DOW = ['в понедельник', 'во вторник', 'в среду', 'в четверг',
