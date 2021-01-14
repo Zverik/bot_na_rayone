@@ -1,7 +1,8 @@
 from raybot.actions.poi import (
     PoiState,
-    print_poi, print_poi_list,
-    POI_LIST_CB, POI_FULL_CB, POI_LOCATION_CB, POI_HOUSE_CB, POI_SIMILAR_CB
+    print_poi, print_poi_list, make_poi_keyboard,
+    POI_LIST_CB, POI_FULL_CB, POI_LOCATION_CB,
+    POI_HOUSE_CB, POI_SIMILAR_CB, POI_STAR_CB
 )
 from raybot.model import db
 from raybot.bot import dp, bot
@@ -48,6 +49,20 @@ async def poi_location(query: types.CallbackQuery, callback_data: Dict[str, str]
     poi = await db.get_poi_by_id(int(callback_data['id']))
     await bot.send_location(query.from_user.id, latitude=poi.location.lat,
                             longitude=poi.location.lon)
+
+
+@dp.callback_query_handler(POI_STAR_CB.filter(), state='*')
+async def star_poi(query: types.CallbackQuery, callback_data: Dict[str, str]):
+    user = query.from_user
+    poi = await db.get_poi_by_id(int(callback_data['id']))
+    action = callback_data['action']
+    if action == 'set':
+        await db.set_star(user.id, poi.id, True)
+    elif action == 'del':
+        await db.set_star(user.id, poi.id, False)
+    kbd = await make_poi_keyboard(user, poi)
+    await bot.edit_message_reply_markup(
+        user.id, query.message.message_id, reply_markup=kbd)
 
 
 @dp.message_handler(filters.RegexpCommandsFilter(regexp_commands=['poi([0-9]+)']), state='*')
@@ -111,6 +126,28 @@ async def print_random(message: types.Message, state: FSMContext):
     await PoiState.poi_list.set()
     await state.set_data({'query': 'random', 'poi': [p.id for p in pois]})
     await print_poi_list(message.from_user, 'random', pois, shuffle=False)
+
+
+@dp.message_handler(commands='my', state='*')
+async def print_starred(message: types.Message, state: FSMContext):
+    pois = await db.get_starred_poi(message.from_user.id)
+    if not pois:
+        await message.answer('Вы пока не отметили ни одного заведения.')
+        return
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'my', 'poi': [p.id for p in pois]})
+    await print_poi_list(message.from_user, 'my', pois)
+
+
+@dp.message_handler(commands='popular', state='*')
+async def print_popular(message: types.Message, state: FSMContext):
+    pois = await db.get_popular_poi(9)
+    if not pois:
+        await message.answer('Популярных заведений пока нет.')
+        return
+    await PoiState.poi_list.set()
+    await state.set_data({'query': 'popular', 'poi': [p.id for p in pois]})
+    await print_poi_list(message.from_user, 'popular', pois)
 
 
 @dp.message_handler(content_types=types.ContentType.LOCATION, state=PoiState.poi_list)

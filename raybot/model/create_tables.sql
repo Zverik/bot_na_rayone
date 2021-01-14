@@ -75,3 +75,11 @@ create table file_ids (
     size integer not null,
     file_id text not null
 );
+
+create table stars(
+    poi_id integer not null,
+    user_id integer not null,
+    ts timestamp not null default current_timestamp
+);
+create unique index stars_idx on stars (poi_id, user_id);
+create index stars_user_idx on stars (user_id);

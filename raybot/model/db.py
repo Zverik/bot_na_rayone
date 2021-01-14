@@ -4,7 +4,7 @@ import os
 import json
 from raybot import config
 from .entities import POI, UserInfo, QueueMessage
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 
 _db = None
@@ -72,6 +72,57 @@ async def get_poi_by_key(str_id: str) -> POI:
     cursor = await db.execute(query, (str_id,))
     row = await cursor.fetchone()
     return None if not row else POI(row)
+
+
+async def count_stars(user_id: int, poi_id: int) -> Tuple[int, bool]:
+    """Returns start count and whether the user have given a star."""
+    query = "select count(*), user_id = ? from stars where poi_id = ? group by user_id = ?"
+    db = await get_db()
+    cursor = await db.execute(query, (user_id, poi_id, user_id))
+    rows = await cursor.fetchall()
+    has_users = len(rows) > 1 or (rows and rows[0][1] == 1)
+    return sum((r[0] for r in rows)), has_users
+
+
+async def stars_for_poi_list(user_id: int, poi_ids: List[int]) -> List[Tuple[int, bool]]:
+    query = ("select poi_id, count(*), user_id = ? from stars where poi_id in ({}) "
+             "group by 1, user_id = ?".format(','.join('?' * len(poi_ids))))
+    db = await get_db()
+    cursor = await db.execute(query, (user_id, *poi_ids, user_id))
+    result = {}
+    async for row in cursor:
+        if row[0] not in result:
+            result[row[0]] = (row[1], row[2] == 1)
+        else:
+            result[row[0]] = (row[1] + result[row[0]][0], True)
+    return result
+
+
+async def get_starred_poi(user_id: int) -> List[POI]:
+    query = ("select * from poi where delete_reason is null and "
+             "id in (select poi_id from stars where user_id = ?)")
+    db = await get_db()
+    cursor = await db.execute(query, (user_id,))
+    return [POI(r) async for r in cursor]
+
+
+async def get_popular_poi(count: int = 10, min_stars: int = 2) -> List[POI]:
+    query = ("select * from poi where delete_reason is null and "
+             "id in (select poi_id from stars group by poi_id having count(*) > ?) "
+             "order by random() limit {}".format(count))
+    db = await get_db()
+    cursor = await db.execute(query, (min_stars,))
+    return [POI(r) async for r in cursor]
+
+
+async def set_star(user_id: int, poi_id: int, star: bool):
+    db = await get_db()
+    if star:
+        query = "insert or ignore into stars (poi_id, user_id) values (?, ?)"
+    else:
+        query = "delete from stars where poi_id = ? and user_id = ?"
+    await db.execute(query, (poi_id, user_id))
+    await db.commit()
 
 
 async def find_poi(keywords: str) -> List[POI]:

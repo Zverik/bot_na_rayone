@@ -7,7 +7,7 @@ import re
 import os
 import random
 import logging
-from typing import List
+from typing import List, Tuple
 from datetime import datetime
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
@@ -21,11 +21,31 @@ POI_SIMILAR_CB = CallbackData('similar', 'id')
 POI_EDIT_CB = CallbackData('poiedit', 'id')
 POI_FULL_CB = CallbackData('plst', 'query', 'ids')
 POI_HOUSE_CB = CallbackData('poih', 'house')
+POI_STAR_CB = CallbackData('poistar', 'id', 'action')
 
 
 class PoiState(StatesGroup):
     poi = State()
     poi_list = State()
+
+
+def star_sort(star: Tuple[int, bool]):
+    """First sort by has user's, second by stars."""
+    if not star:
+        return 0, 0
+    if star[0] < 2:
+        grade = 0
+    elif star[0] < 5:
+        grade = 1
+    elif star[0] < 10:
+        grade = 2
+    elif star[0] < 20:
+        grade = 3
+    elif star[0] < 50:
+        grade = 4
+    else:
+        grade = 5
+    return 1 if star[1] else 0, grade
 
 
 async def print_poi_list(user: types.User, query: str, pois: List[POI],
@@ -38,6 +58,9 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             pois.sort(key=lambda p: location.distance(p.location))
         else:
             random.shuffle(pois)
+            stars = await db.stars_for_poi_list(user.id, [p.id for p in pois])
+            if stars:
+                pois.sort(key=lambda p: star_sort(stars.get(p.id)), reverse=True)
         pois.sort(key=lambda p: bool(p.hours) and not p.hours.is_open())
     total_count = len(pois)
     all_ids = pack_ids([p.id for p in pois])
@@ -151,8 +174,23 @@ def describe_poi(poi: POI):
     return '\n'.join(result)
 
 
-def make_poi_keyboard(poi: POI):
-    kbd = types.InlineKeyboardMarkup(row_width=2)
+async def make_poi_keyboard(user: types.User, poi: POI):
+    buttons = []
+    stars, given_star = await db.count_stars(user.id, poi.id)
+    if not given_star:
+        star_button = config.MSG['star']
+    else:
+        star_button = config.MSG['starred']
+    buttons.append(types.InlineKeyboardButton(
+        star_button, callback_data=POI_STAR_CB.new(
+            id=poi.id, action='del' if given_star else 'set')
+    ))
+
+    buttons.append(types.InlineKeyboardButton(
+        config.MSG['location'], callback_data=POI_LOCATION_CB.new(id=poi.id)))
+    buttons.append(types.InlineKeyboardButton(
+        config.MSG['edit_poi'], callback_data=POI_EDIT_CB.new(id=poi.id)))
+
     if poi.links:
         link_dict = dict(poi.links)
         if config.MSG['default_link'] in link_dict:
@@ -161,15 +199,17 @@ def make_poi_keyboard(poi: POI):
         else:
             link_title = poi.links[0][0]
             link = poi.links[0][1]
-        kbd.insert(types.InlineKeyboardButton('🌐 ' + link_title, url=link))
-    kbd.insert(types.InlineKeyboardButton(
-        '📍 Координаты', callback_data=POI_LOCATION_CB.new(id=poi.id)))
+        buttons.append(types.InlineKeyboardButton('🌐 ' + link_title, url=link))
+
     if poi.tag and poi.tag not in ('building', 'entrance'):
         emoji = config.TAGS['emoji'].get(poi.tag, config.TAGS['emoji']['default'])
-        kbd.insert(types.InlineKeyboardButton(
-            emoji + ' Похожие', callback_data=POI_SIMILAR_CB.new(id=poi.id)))
-    kbd.insert(types.InlineKeyboardButton(
-        '📝 Поправить', callback_data=POI_EDIT_CB.new(id=poi.id)))
+        buttons.append(types.InlineKeyboardButton(
+            emoji + ' ' + config.MSG['similar'],
+            callback_data=POI_SIMILAR_CB.new(id=poi.id)
+        ))
+
+    kbd = types.InlineKeyboardMarkup(row_width=2 if len(buttons) < 5 else 3)
+    kbd.add(*buttons)
     return kbd
 
 
@@ -229,7 +269,7 @@ async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bo
     if poi.tag == 'building':
         kbd = await make_house_keyboard(poi)
     else:
-        kbd = None if not buttons else make_poi_keyboard(poi)
+        kbd = None if not buttons else await make_poi_keyboard(user, poi)
 
     # Send the message
     if not photos:

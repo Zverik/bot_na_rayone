@@ -53,7 +53,7 @@ def location_keyboard():
 
 
 def valid_location(loc):
-    bbox = config.MSG.get('bbox')
+    bbox = config.BBOX
     if not bbox or len(bbox) != 4:
         return True
     return bbox[0] <= loc.lon <= bbox[2] and bbox[1] <= loc.lat <= bbox[3]
