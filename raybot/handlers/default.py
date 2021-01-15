@@ -114,7 +114,7 @@ async def test_predefined(message, tokens) -> bool:
                 user = await get_user(message.from_user)
                 if resp['role'] not in user.roles:
                     continue
-            msg = resp['name']
+            content = resp.get('name', '')
             photo = None
             if 'photo' in resp:
                 photo_path = os.path.join(config.PHOTOS, resp['photo'])
@@ -126,17 +126,19 @@ async def test_predefined(message, tokens) -> bool:
                     else:
                         photo = types.InputFile(photo_path)
             if 'message' in resp:
-                msg += '\n\n' + resp['message']
+                if content:
+                    content += '\n\n'
+                content += resp['message']
 
             if photo:
                 msg = await message.answer_photo(
-                    photo, caption=msg, parse_mode=HTML,
+                    photo, caption=content, parse_mode=HTML,
                     reply_markup=get_buttons())
                 if not isinstance(photo, str):
                     file_id = msg.photo[0].file_id
                     await db.store_file_id(resp['photo'], os.path.getsize(photo_path), file_id)
             else:
-                await message.answer(msg, parse_mode=HTML,
+                await message.answer(content, parse_mode=HTML,
                                      reply_markup=get_buttons())
             return True
     return False

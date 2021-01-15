@@ -9,7 +9,7 @@ import struct
 
 
 userdata = {}
-SKIP_TOKENS = set(config.MSG['skip'])
+SKIP_TOKENS = set(config.RESP['skip'])
 # Markdown requires too much escaping, so we're using HTML
 HTML = types.ParseMode.HTML
 PRUNE_TIMEOUT = 600
@@ -17,7 +17,7 @@ PRUNE_TIMEOUT = 600
 
 def reverse_synonims():
     result = {}
-    for k, v in config.MSG['synonims'].items():
+    for k, v in config.RESP['synonims'].items():
         for s in v:
             result[s] = k
     # Add emoji from tags
