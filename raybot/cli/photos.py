@@ -9,7 +9,7 @@ async def aiorun():
     for name in os.listdir(config.PHOTOS):
         if name.endswith('.jpg'):
             photos.add(name.rsplit('.', 1)[0])
-    for predef in config.MSG['responses']:
+    for predef in config.RESP['responses']:
         if 'photo' in predef:
             if not os.path.exists(os.path.join(config.PHOTOS, predef['photo'])):
                 print(f'Missing photo for predef resp "{predef["name"]}": {predef["photo"]}')

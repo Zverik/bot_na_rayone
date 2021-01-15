@@ -97,7 +97,7 @@ def h(s: str) -> str:
 
 def get_buttons():
     buttons = []
-    for row in config.MSG['buttons']:
+    for row in config.RESP['buttons']:
         buttons.append([types.KeyboardButton(text=btn) for btn in row])
     kbd = types.ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
     return kbd

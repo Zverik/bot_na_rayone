@@ -15,7 +15,7 @@ from aiogram.dispatcher import FSMContext
 @dp.message_handler(commands=['start'], state='*')
 async def welcome(message: types.Message, state: FSMContext):
     await state.finish()
-    await message.answer(config.MSG['start'].replace('\n', '\n\n'), reply_markup=get_buttons())
+    await message.answer(config.RESP['start'].replace('\n', '\n\n'), reply_markup=get_buttons())
     payload = message.get_args()
     if payload:
         try:
@@ -32,7 +32,7 @@ async def welcome(message: types.Message, state: FSMContext):
 @dp.message_handler(commands=['help'], state='*')
 async def help(message: types.Message, state: FSMContext):
     await state.finish()
-    msg = config.MSG['help']
+    msg = config.RESP['help']
     stats = await db.get_stats()
     for k, v in stats.items():
         msg = msg.replace('{' + k + '}', h(str(v)))
@@ -108,7 +108,7 @@ async def process_query(message, state, tokens):
 
 
 async def test_predefined(message, tokens) -> bool:
-    for resp in config.MSG['responses']:
+    for resp in config.RESP['responses']:
         if has_keyword(tokens, resp['keywords']):
             if 'role' in resp:
                 user = await get_user(message.from_user)

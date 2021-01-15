@@ -3,6 +3,7 @@ from typing import Sequence
 import math
 import os
 import tempfile
+import logging
 from raybot import config
 from raybot.model import Location
 
@@ -21,7 +22,7 @@ def deg2num(lon_deg, lat_deg, zoom):
 
 def get_zooms():
     global zooms
-    if zooms:
+    if zooms or not os.path.exists(config.TILES):
         return zooms
     zooms = sorted([int(z) for z in os.listdir(config.TILES) if z.isdecimal()])
     return zooms
@@ -38,24 +39,30 @@ def load_tile(zoom, x, y, tilesize=256):
             tile = Image.open(path)
         except IOError:
             pass
-    if tile is None:
+    found = tile is not None
+    if not found:
         tile = Image.new("RGBA", (tilesize, tilesize), color='#ffeeee')
-    cached_tiles[k] = tile
-    return tile
+    cached_tiles[k] = (tile, found)
+    return (tile, found)
 
 
 def merge_tiles(xmin, ymin, xmax, ymax, zoom, tilesize=256):
     xsize = xmax - xmin + 1
     ysize = ymax - ymin + 1
     if xsize * ysize > 20:
-        raise ValueError(f'Too many tiles to join: {xsize} × {ysize}')
+        logging.error(f'Too many tiles to join: {xsize} × {ysize} '
+                      f'({xmin}-{xmax}, {ymin}-{ymax}, {zoom})')
+        return None
 
+    found_any = False
     image = Image.new("RGBA", (xsize * tilesize, ysize * tilesize))
     for x in range(xmin, xmax + 1):
         for y in range(ymin, ymax + 1):
-            tile = load_tile(zoom, x, y)
+            tile, found = load_tile(zoom, x, y)
             image.paste(tile, ((x - xmin) * tilesize, (y - ymin) * tilesize))
-    return image
+            if found:
+                found_any = True
+    return image if found_any else None
 
 
 def build_basemap(minlon, minlat, maxlon, maxlat, gutter=100,
@@ -81,6 +88,8 @@ def build_basemap(minlon, minlat, maxlon, maxlat, gutter=100,
     txmax = int(xmax + 1.0 * gutter / tilesize)
     tymax = int(ymax + 1.0 * gutter / tilesize)
     image = merge_tiles(txmin, tymin, txmax, tymax, zoom)
+    if not image:
+        return None
 
     cxmin = int((xmin - txmin) * tilesize) - gutter
     cymin = int((ymin - tymin) * tilesize) - gutter
@@ -120,6 +129,8 @@ def get_map(coords: Sequence[Location], ref: Location = None):
     minlon, minlat, maxlon, maxlat = find_bounds(coords + [ref])
     gutter = 200 if len(coords) > 1 else 300
     image, get_xy = build_basemap(minlon, minlat, maxlon, maxlat, gutter=gutter, maxzoom=17)
+    if not image:
+        return None
 
     draw = ImageDraw.Draw(image)
     draw.text((5, image.height - 15), '© OpenStreetMap', fill='#0f0f0f', anchor='ls')

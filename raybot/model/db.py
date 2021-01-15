@@ -440,6 +440,8 @@ async def get_stats():
     cursor = await db.execute("select count(*) from poi where delete_reason is null "
                               "and (tag is null or tag not in ('building', 'entrance'))")
     stats['pois'] = (await cursor.fetchone())[0]
+    cursor = await db.execute("select count(*) from stars")
+    stats['stars'] = (await cursor.fetchone())[0]
     return stats
 
 
