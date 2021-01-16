@@ -1,6 +1,6 @@
 from raybot.model import db
 from raybot.bot import dp
-from raybot.cli import geojson, buildings, photos, test_map, missing
+from raybot.cli import geojson, buildings, photos, test_map, missing, tags
 import raybot.handlers  # noqa
 import logging
 import sys
@@ -21,6 +21,10 @@ if __name__ == '__main__':
             geojson.run_export()
         elif cmd == 'import':
             geojson.run_import()
+        elif cmd == 'export_tags':
+            tags.run_export()
+        elif cmd == 'import_tags':
+            tags.run_import()
         elif cmd == 'buildings':
             buildings.run()
         elif cmd == 'photos':
@@ -34,6 +38,8 @@ if __name__ == '__main__':
             print()
             print('export — export poi database to a geojson')
             print('import — import poi database from a geojson')
+            print('export_tags — export poi and their tags to a CSV file')
+            print('import_tags — import poi tags from a CSV file')
             print('buildings — print missing building photos and entrance info')
             print('photos — print missing and stray photos')
             print('missing — print pois with missing important keys')

@@ -570,11 +570,13 @@ async def store_location(message: types.Message, state: FSMContext):
 
 
 RE_URL = re.compile(r'^https?://')
-RE_HOURS = re.compile(r'^(?:(пн|вт|ср|чт|пт|сб|вс)(?:\s*-?\s*(пн|вт|ср|чт|пт|сб|вс))?\s+)?'
+RE_HOURS = re.compile(r'^(?:(пн|вт|ср|чт|пт|сб|вс|mo|tu|we|th|fr|sa|su)(?:\s*-?'
+                      r'\s*(пн|вт|ср|чт|пт|сб|вс|mo|tu|we|th|fr|sa|su))?\s+)?'
                       r'(\d\d?(?:[:.]\d\d)?)\s*-\s*(\d\d(?:[:.]\d\d)?)'
                       r'(?:\s+об?е?д?\s+(\d\d?(?:[:.]\d\d)?)\s*-\s*(\d\d(?:[:.]\d\d)?))?$')
 HOURS_WEEK = {'пн': 'Mo', 'вт': 'Tu', 'ср': 'We', 'чт': 'Th',
-              'пт': 'Fr', 'сб': 'Sa', 'вс': 'Su'}
+              'пт': 'Fr', 'сб': 'Sa', 'вс': 'Su', 'mo': 'Mo', 'tu': 'Tu',
+              'we': 'We', 'th': 'Th', 'fr': 'Fr', 'sa': 'Sa', 'su': 'Su'}
 
 
 def parse_hours(s):

@@ -1,5 +1,5 @@
 tags:
-  amenity=art_school: [студия, школа]
+  amenity=art_school: [изостудия, студия, школа, рисование, рисования, изо, искусство, искусств, художественная]
   amenity=atm: [банкомат, atm, банк, снять, деньги]
   amenity=bank: [банк, кредит, кредиты, деньги, валюта]
   amenity=bar: [бар, пиво, паб, beer, bar, pub]
@@ -132,16 +132,16 @@ suggest_tags:
   - amenity=school
   - amenity=childcare
   - amenity=art_school
+  - amenity=music_school
   - amenity=language_school
   - amenity=dancing_school
-  - shop=toys
 
+  - shop=toys
   - shop=stationery
   - shop=craft
   - shop=pet
   - shop=outdoor
   - shop=car_parts
-  - shop=bicycle
 
   - shop=electronics
   - shop=lighting
