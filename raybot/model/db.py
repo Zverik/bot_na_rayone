@@ -106,7 +106,15 @@ async def get_starred_poi(user_id: int) -> List[POI]:
     return [POI(r) async for r in cursor]
 
 
-async def get_popular_poi(count: int = 10, min_stars: int = 2) -> List[POI]:
+async def get_popular_poi(count: int = 10, min_stars: int = 2, top: int = 30) -> List[POI]:
+    # TODO: Choose only among top N pois by stars.
+    # query = ("""\
+    # with popular as (select poi_id, count(*) as stars from stars
+    # group by poi_id having count(*) > ? order by stars desc limit {})
+    # select * from poi left join popular on poi_id = poi.id
+    # where delete_reason is null and stars is not null
+    # order by random() limit {}""".format(top, count))
+
     query = ("select * from poi where delete_reason is null and "
              "id in (select poi_id from stars group by poi_id having count(*) > ?) "
              "order by random() limit {}".format(count))
