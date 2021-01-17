@@ -11,7 +11,7 @@ git-репозитория:
 привычным вам способом. Например:
 
 * `python3 -m venv venv`
-* `pipenv install`
+* `pipenv install -r requirements.txt`
 * `hatch env na_rayone`
 
 И иногда нужно будет запустить `pip` из этого окружения:
