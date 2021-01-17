@@ -155,9 +155,11 @@ class UserInfo:
 class QueueMessage:
     id: int
     user_id: int
+    approved_by: int
     user_name: str
     ts: datetime
     poi_id: int
+    poi_name: str
     field: str
     old_value: str
     new_value: str
@@ -165,9 +167,18 @@ class QueueMessage:
     def __init__(self, row):
         self.id = row['id']
         self.user_id = row['user_id']
-        self.user_name = row['user_name']
-        self.ts = row['ts']
+        self.approved_by = row['approved_by'] if 'approved_by' in row.keys() else None
+        self.user_name = row['user_name'] if 'user_name' in row.keys() else None
+        if not row['ts'] or isinstance(row['ts'], datetime):
+            self.ts = row['ts']
+        else:
+            try:
+                self.ts = datetime.strptime(row['ts'].split('.')[0], '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                # Setting it to string, since we have no choice
+                self.ts = row['ts']
         self.poi_id = row['poi_id']
+        self.poi_name = row['poi_name'] if 'poi_name' in row.keys() else None
         self.field = row['field']
         self.old_value = row['old_value']
         self.new_value = row['new_value']

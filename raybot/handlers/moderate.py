@@ -170,7 +170,7 @@ async def add_mod(message: types.Message, state: FSMContext):
     await db.add_user_to_role(new_user, 'moderator', me)
     forget_user(new_user.id)
     await message.answer(f'Пользователь {new_user.name} теперь модератор.')
-    await bot.send_message(new_user.id, 'Вы теперь модератор. Попробуйте /queue')
+    await bot.send_message(new_user.id, 'Вы теперь модератор. Попробуйте /queue и /admin.')
 
 
 @dp.callback_query_handler(MOD_REMOVE_CB.filter(), state=ModState.mod)
@@ -230,6 +230,26 @@ async def print_missing_value(user: types.User, k: str, state: FSMContext):
     await print_poi_list(user, f'empty {k}', pois, shuffle=False)
 
 
+async def print_audit(user: types.User):
+    content = 'Последние операции:'
+    last_audit = await db.get_last_audit(15)
+    for a in last_audit:
+        user_name = a.user_name if a.user_id == a.approved_by else str(a.user_id)
+        if user_name is None:
+            user_name = 'Администратор'
+        line = f'{a.ts.strftime("%Y-%m-%d %H:%S")} {user_name}'
+        if a.approved_by != a.user_id:
+            line += f' (подтвердил {a.user_name})'
+        if a.field == 'poi':
+            line += ' создал' if not a.old_value else ' удалил'
+            line += f' «{a.poi_name}» /poi{a.poi_id}'
+        else:
+            line += (f' изменил у «{a.poi_name}» /poi{a.poi_id} '
+                     f'поле {a.field}: "{a.old_value}" → "{a.new_value}"')
+        content += '\n\n' + h(line) + '.'
+    await bot.send_message(user.id, content, disable_web_page_preview=True)
+
+
 async def dedup_photos():
     def hashall(photos):
         result = defaultdict(list)
@@ -275,41 +295,76 @@ async def dedup_photos():
     return removed
 
 
+async def delete_unused_photos():
+    photos = set()
+    for name in os.listdir(config.PHOTOS):
+        if name.endswith('.jpg'):
+            photos.add(name.rsplit('.', 1)[0])
+    for predef in config.RESP['responses']:
+        if 'photo' in predef:
+            photos.discard(predef['photo'].rsplit('.', 1)[0])
+
+    conn = await db.get_db()
+    cursor = await conn.execute(
+        "select name, photo_out, photo_in from poi where photo_out is not null "
+        "or photo_in is not null")
+    async for row in cursor:
+        for c in (1, 2):
+            if row[c]:
+                photos.discard(row[c])
+    for name in photos:
+        path = os.path.join(config.PHOTOS, name + '.jpg')
+        os.remove(path)
+    return len(photos)
+
+
 @dp.message_handler(commands='admin', state='*')
 async def admin_info(message: types.Message):
-    if message.from_user.id != config.ADMIN:
+    info = await get_user(message.from_user)
+    if not info.is_moderator():
         raise SkipHandler
     kbd = types.InlineKeyboardMarkup(row_width=2)
-    kbd.insert(types.InlineKeyboardButton('Модераторы',
-                                          callback_data=ADMIN_CB.new(action='mod')))
+    if info.id == config.ADMIN:
+        kbd.insert(types.InlineKeyboardButton('Модераторы',
+                                              callback_data=ADMIN_CB.new(action='mod')))
+        kbd.insert(types.InlineKeyboardButton('Аудит',
+                                              callback_data=ADMIN_CB.new(action='audit')))
+        kbd.insert(types.InlineKeyboardButton('Дедубл. фото',
+                                              callback_data=ADMIN_CB.new(action='dedup')))
+        kbd.insert(types.InlineKeyboardButton('Подчистить фото',
+                                              callback_data=ADMIN_CB.new(action='unused')))
     kbd.insert(types.InlineKeyboardButton('Перестроить индекс',
                                           callback_data=ADMIN_CB.new(action='reindex')))
-    kbd.insert(types.InlineKeyboardButton('Дедубл. фото',
-                                          callback_data=ADMIN_CB.new(action='dedup')))
     kbd.row(
         types.InlineKeyboardButton('Нет адреса', callback_data=ADMIN_CB.new(action='mis-house')),
         types.InlineKeyboardButton('Нет фото', callback_data=ADMIN_CB.new(action='mis-photo')),
         types.InlineKeyboardButton('Нет тега', callback_data=ADMIN_CB.new(action='mis-tag')),
     )
-    await message.answer('Привет, админ! Нажми что-нибудь.', reply_markup=kbd)
+    await message.answer('Привет, модератор! Нажми что-нибудь.', reply_markup=kbd)
 
 
 @dp.callback_query_handler(ADMIN_CB.filter(), state='*')
 async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str],
                         state: FSMContext):
     user = query.from_user
-    if user.id != config.ADMIN:
+    info = await get_user(user)
+    if not info.is_moderator():
         raise SkipHandler
     action = callback_data['action']
-    if action == 'mod':
+    if action == 'mod' and user.id == config.ADMIN:
         await manage_mods(user, state)
         return
     elif action == 'reindex':
         await db.reindex()
         await bot.send_message(user.id, 'Поисковый индекс перестроен.')
-    elif action == 'dedup':
+    elif action == 'dedup' and user.id == config.ADMIN:
         cnt = await dedup_photos(user)
         await bot.send_message(f'Удалили {cnt} дубликатов фото.')
+    elif action == 'unused' and user.id == config.ADMIN:
+        cnt = await delete_unused_photos(user)
+        await bot.send_message(f'Удалили {cnt} неиспользованных фото.')
+    elif action == 'audit' and user.id == config.ADMIN:
+        await print_audit(user)
     elif action == 'mis-house':
         await print_missing_value(user, 'house', state)
     elif action == 'mis-photo':

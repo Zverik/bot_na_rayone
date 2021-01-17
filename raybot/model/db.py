@@ -354,6 +354,16 @@ async def get_queue(count: int = 1):
     return [QueueMessage(r) async for r in cursor]
 
 
+async def get_last_audit(count: int = 10):
+    query = ("select a.*, r.name as user_name, poi.name as poi_name "
+             "from poi_audit a left join roles r on r.user_id = a.approved_by "
+             "left join poi on poi.id = a.poi_id "
+             f"order by a.ts desc limit {count}")
+    db = await get_db()
+    cursor = await db.execute(query)
+    return [QueueMessage(r) async for r in cursor]
+
+
 async def get_queue_msg(qid: int):
     query = f"select * from queue where id = ?"
     db = await get_db()
