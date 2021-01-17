@@ -32,15 +32,14 @@ def reverse_synonims():
 SYNONIMS = reverse_synonims()
 
 
-def has_keyword(tokens, keywords, kwsuffix=None):
+def has_keyword(token, keywords, kwsuffix=''):
     found = False
     for k in keywords:
-        # TODO: other tokens?
         if k.endswith('*'):
-            if kwsuffix is None:
-                found = tokens[0].startswith(k[:-1])
+            if not kwsuffix:
+                found = token.startswith(k[:-1])
         else:
-            found = tokens[0] == (k + kwsuffix if kwsuffix else k)
+            found = token == k + kwsuffix
         if found:
             break
     return found
@@ -95,9 +94,9 @@ def h(s: str) -> str:
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def get_buttons():
+def get_buttons(rows=None):
     buttons = []
-    for row in config.RESP['buttons']:
+    for row in rows or config.RESP['buttons']:
         buttons.append([types.KeyboardButton(text=btn) for btn in row])
     kbd = types.ReplyKeyboardMarkup(buttons, resize_keyboard=True, one_time_keyboard=True)
     return kbd

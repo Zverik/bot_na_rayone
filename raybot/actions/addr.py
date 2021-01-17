@@ -22,7 +22,7 @@ async def test_address(message: types.Message, tokens: List[str], state: FSMCont
     if 'streets' not in config.ADDR:
         return False
     for street in config.ADDR['streets']:
-        if has_keyword(tokens[:1], street['keywords']):
+        if has_keyword(tokens[0], street['keywords']):
             if len(tokens) == 1:
                 await AddrState.street.set()
                 await state.set_data({'street': street['name']})
@@ -33,7 +33,7 @@ async def test_address(message: types.Message, tokens: List[str], state: FSMCont
 
         # Check buildings like "mst6"
         for house in street['buildings']:
-            if has_keyword(tokens, street['keywords'], str(house)):
+            if has_keyword(tokens[0], street['keywords'], str(house)):
                 await handle_building(message.from_user, street, [house] + tokens[1:], state)
                 return True
     return False

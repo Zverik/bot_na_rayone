@@ -108,8 +108,11 @@ async def process_query(message, state, tokens):
 
 
 async def test_predefined(message, tokens) -> bool:
+    all_tokens = ' '.join(tokens)
+    query = message.text.lower().strip()
     for resp in config.RESP['responses']:
-        if has_keyword(tokens, resp['keywords']):
+        kw = [k.lower() for k in resp['keywords']]
+        if has_keyword(all_tokens, kw) or has_keyword(query, kw):
             if 'role' in resp:
                 user = await get_user(message.from_user)
                 if resp['role'] not in user.roles:
@@ -129,17 +132,16 @@ async def test_predefined(message, tokens) -> bool:
                 if content:
                     content += '\n\n'
                 content += resp['message']
+            kbd = get_buttons(resp.get('buttons'))
 
             if photo:
                 msg = await message.answer_photo(
-                    photo, caption=content, parse_mode=HTML,
-                    reply_markup=get_buttons())
+                    photo, caption=content, parse_mode=HTML, reply_markup=kbd)
                 if not isinstance(photo, str):
                     file_id = msg.photo[0].file_id
                     await db.store_file_id(resp['photo'], os.path.getsize(photo_path), file_id)
             else:
-                await message.answer(content, parse_mode=HTML,
-                                     reply_markup=get_buttons())
+                await message.answer(content, parse_mode=HTML, reply_markup=kbd)
             return True
     return False
 
