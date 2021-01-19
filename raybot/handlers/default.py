@@ -36,7 +36,7 @@ async def help(message: types.Message, state: FSMContext):
     stats = await db.get_stats()
     for k, v in stats.items():
         msg = msg.replace('{' + k + '}', h(str(v)))
-    await message.answer(msg, reply_markup=get_buttons())
+    await message.answer(msg, parse_mode=HTML, reply_markup=get_buttons())
 
 
 def write_search_log(message, tokens, result):
