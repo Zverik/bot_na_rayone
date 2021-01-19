@@ -20,7 +20,7 @@
 
 ## Автор и лицензия
 
-Бота написал Илья Зверев. Опубликовано под лицензиями WTFPL и ISC: делайте
+Бота написал Илья Зверев. Опубликовано под лицензией ISC: делайте
 с кодом и файлами в `config/` что хотите. Документация (этот текст и всё
 в `docs/`) опубликованы под CC-BY 4.0.
 
@@ -37,4 +37,4 @@ are not (yet) translated. The author doesn't plan to add i18n in the nearest
 future, but if they get help, they might prepare a different-language
 version.
 
-Written by Ilya Zverev. Code is published under WTFPL, documentation is CC-BY 4.0.
+Written by Ilya Zverev. Code is published under ISC, documentation is CC-BY 4.0.
