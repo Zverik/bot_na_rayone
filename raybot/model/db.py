@@ -170,7 +170,7 @@ async def poi_with_empty_value(field: str, buildings: bool = False,
     query = ("select poi.*, h.name as h_address from poi "
              "left join poi h on h.str_id = poi.house "
              "where poi.in_index and poi.delete_reason is null "
-             "{b}{f}"
+             "{b}{e}{f}"
              "and poi.{k} is null order by updated desc".format(
                  k=field, b='' if buildings else no_buildings,
                  e='' if entrances else no_entrances,
