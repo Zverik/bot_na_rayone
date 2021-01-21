@@ -116,7 +116,7 @@ async def simlar_poi(query: types.CallbackQuery, callback_data: Dict[str, str],
     else:
         pois = await db.get_poi_by_tag(poi.tag)
         if len(pois) == 1:
-            await query.answer('Нет похожих заведений')
+            await query.answer(config.MSG['no_similar'])
         else:
             tag_names = config.TAGS['tags'].get(poi.tag)
             pquery = poi.tag if not tag_names else tag_names[0]
@@ -145,7 +145,7 @@ async def print_random(message: types.Message, state: FSMContext):
 async def print_starred(message: types.Message, state: FSMContext):
     pois = await db.get_starred_poi(message.from_user.id)
     if not pois:
-        await message.answer('Вы пока не отметили ни одного заведения.')
+        await message.answer(config.MSG['no_starred'])
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'my', 'poi': [p.id for p in pois]})
@@ -156,7 +156,7 @@ async def print_starred(message: types.Message, state: FSMContext):
 async def print_popular(message: types.Message, state: FSMContext):
     pois = await db.get_popular_poi(9)
     if not pois:
-        await message.answer('Популярных заведений пока нет.')
+        await message.answer(config.MSG['no_popular'])
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'popular', 'poi': [p.id for p in pois]})

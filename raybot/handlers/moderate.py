@@ -226,7 +226,7 @@ async def print_missing_value(user: types.User, k: str, state: FSMContext):
         await bot.send_message(user.id, 'Нет таких.')
         return
     await PoiState.poi_list.set()
-    await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
+    await state.set_data({'query': f'empty {k}', 'poi': [p.id for p in pois]})
     await print_poi_list(user, f'empty {k}', pois, shuffle=False)
 
 
@@ -337,8 +337,13 @@ async def admin_info(message: types.Message):
                                           callback_data=ADMIN_CB.new(action='reindex')))
     kbd.row(
         types.InlineKeyboardButton('Нет адреса', callback_data=ADMIN_CB.new(action='mis-house')),
+        types.InlineKeyboardButton('Нет этажа', callback_data=ADMIN_CB.new(action='mis-floor')),
         types.InlineKeyboardButton('Нет фото', callback_data=ADMIN_CB.new(action='mis-photo')),
+    )
+    kbd.row(
         types.InlineKeyboardButton('Нет тега', callback_data=ADMIN_CB.new(action='mis-tag')),
+        types.InlineKeyboardButton('Нет ключ. слов',
+                                   callback_data=ADMIN_CB.new(action='mis-keywords')),
     )
     await message.answer('Привет, модератор! Нажми что-нибудь.', reply_markup=kbd)
 
@@ -369,6 +374,10 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         await print_missing_value(user, 'house', state)
     elif action == 'mis-photo':
         await print_missing_value(user, 'photo_out', state)
+    elif action == 'mis-floor':
+        await print_missing_value(user, 'flor', state)
+    elif action == 'mis-keywords':
+        await print_missing_value(user, 'keywords', state)
     elif action == 'mis-tag':
         await print_missing_value(user, 'tag', state)
     else:

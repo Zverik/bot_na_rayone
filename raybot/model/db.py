@@ -162,12 +162,16 @@ async def find_poi(keywords: str) -> List[POI]:
 
 async def poi_with_empty_value(field: str, buildings: bool = False) -> List[POI]:
     no_buildings = "and (poi.tag is null or poi.tag != 'building') "
+    needs_floor = ("and poi.house in (select distinct house from poi "
+                   "where house is not null and flor is not null "
+                   "and in_index and delete_reason is null) ")
     query = ("select poi.*, h.name as h_address from poi "
              "left join poi h on h.str_id = poi.house "
              "where poi.in_index and poi.delete_reason is null "
-             "{b}"
+             "{b}{f}"
              "and poi.{k} is null order by updated desc".format(
-                 k=field, b='' if buildings else no_buildings))
+                 k=field, b='' if buildings else no_buildings,
+                 f=needs_floor if field == 'flor' else ''))
     db = await get_db()
     cursor = await db.execute(query)
     return [POI(r) async for r in cursor]
