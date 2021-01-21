@@ -162,7 +162,8 @@ async def find_poi(keywords: str) -> List[POI]:
 
 async def poi_with_empty_value(field: str, buildings: bool = False) -> List[POI]:
     no_buildings = "and (poi.tag is null or poi.tag != 'building') "
-    needs_floor = ("and poi.house in (select distinct house from poi "
+    needs_floor = ("and (poi.tag is null or poi.tag != 'entrance') "
+                   "and poi.house in (select distinct house from poi "
                    "where house is not null and flor is not null "
                    "and in_index and delete_reason is null) ")
     query = ("select poi.*, h.name as h_address from poi "
