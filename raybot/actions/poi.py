@@ -20,7 +20,7 @@ POI_LOCATION_CB = CallbackData('poiloc', 'id')
 POI_SIMILAR_CB = CallbackData('similar', 'id')
 POI_EDIT_CB = CallbackData('poiedit', 'id')
 POI_FULL_CB = CallbackData('plst', 'query', 'ids')
-POI_HOUSE_CB = CallbackData('poih', 'house')
+POI_HOUSE_CB = CallbackData('poih', 'house', 'floor')
 POI_STAR_CB = CallbackData('poistar', 'id', 'action')
 
 
@@ -154,7 +154,8 @@ def describe_poi(poi: POI):
              for link in poi.links]
         )))
     if poi.house_name or poi.address_part:
-        address = ', '.join([s for s in (poi.house_name, uncap(poi.address_part)) if s])
+        address = ', '.join(
+            [s for s in (poi.house_name, poi.floor, uncap(poi.address_part)) if s])
         part2.append(f'🏠 {address}.')
     if poi.has_wifi is True:
         part2.append('📶 Есть бесплатный Wi-Fi.')
@@ -224,7 +225,8 @@ async def make_house_keyboard(poi: POI):
 
     return types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
-            'Заведения в этом доме', callback_data=POI_HOUSE_CB.new(house=poi.key))
+            config.MSG['poi_in_house'],
+            callback_data=POI_HOUSE_CB.new(house=poi.key, floor='-'))
     )
 
 

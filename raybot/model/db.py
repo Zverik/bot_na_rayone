@@ -51,11 +51,17 @@ async def get_poi_by_ids(poi_ids: List[int]) -> POI:
     return [POI(r) async for r in cursor]
 
 
-async def get_poi_by_house(house: str) -> POI:
-    query = ("select * from poi where house = ? and in_index and delete_reason is null and "
-             "(tag is null or tag not in ('entrance', 'building'))")
+async def get_poi_by_house(house: str, floor: str = None) -> POI:
+    if floor:
+        query = ("select * from poi where house = ? and in_index and delete_reason is null "
+                 "and (tag is null or tag not in ('entrance', 'building')) and flor = ?")
+        args = (house, floor)
+    else:
+        query = ("select * from poi where house = ? and in_index and delete_reason is null "
+                 "and (tag is null or tag not in ('entrance', 'building'))")
+        args = (house,)
     db = await get_db()
-    cursor = await db.execute(query, (house,))
+    cursor = await db.execute(query, args)
     return [POI(r) async for r in cursor]
 
 
@@ -72,6 +78,17 @@ async def get_poi_by_key(str_id: str) -> POI:
     cursor = await db.execute(query, (str_id,))
     row = await cursor.fetchone()
     return None if not row else POI(row)
+
+
+async def get_floors_by_house(house: str) -> POI:
+    if not house:
+        return []
+    query = ("select distinct flor from poi where house = ? and in_index "
+             "and delete_reason is null "
+             "and (tag is null or tag not in ('entrance', 'building'))")
+    db = await get_db()
+    cursor = await db.execute(query, (house,))
+    return [r[0] async for r in cursor]
 
 
 async def count_stars(user_id: int, poi_id: int) -> Tuple[int, bool]:
@@ -110,13 +127,13 @@ async def get_popular_poi(count: int = 10, min_stars: int = 2, top: int = 30) ->
     # TODO: Choose only among top N pois by stars.
     # query = ("""\
     # with popular as (select poi_id, count(*) as stars from stars
-    # group by poi_id having count(*) > ? order by stars desc limit {})
+    # group by poi_id having count(*) >= ? order by stars desc limit {})
     # select * from poi left join popular on poi_id = poi.id
     # where delete_reason is null and stars is not null
     # order by random() limit {}""".format(top, count))
 
     query = ("select * from poi where delete_reason is null and "
-             "id in (select poi_id from stars group by poi_id having count(*) > ?) "
+             "id in (select poi_id from stars group by poi_id having count(*) >= ?) "
              "order by random() limit {}".format(count))
     db = await get_db()
     cursor = await db.execute(query, (min_stars,))

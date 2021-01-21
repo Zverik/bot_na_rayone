@@ -45,6 +45,7 @@ class POI:
     phones: List[str] = field(default_factory=list)
     house: str = None
     house_name: str = None
+    floor: str = None
     tag: str = None
     delete_reason: str = None
 
@@ -72,6 +73,7 @@ class POI:
             self.has_wifi = None if row['has_wifi'] is None else row['has_wifi'] == 1
             self.accepts_cards = None if row['accepts_cards'] is None else row['accepts_cards'] == 1
             self.tag = row['tag']
+            self.floor = row['flor']
             self.needs_check = row['needs_check'] == 1
             self.delete_reason = row['delete_reason']
         else:
@@ -105,6 +107,7 @@ class POI:
             'comment': self.comment,
             'address': self.address_part,
             'house': self.house,
+            'flor': self.floor,
             'needs_check': 1 if self.needs_check else 0,
         }
         if orig:

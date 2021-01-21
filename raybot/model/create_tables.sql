@@ -21,6 +21,7 @@ create table poi (
   address text,
   in_index boolean not null default 1,
   house text, -- reference to a poi / str_id
+  flor text,
   delete_reason text
 );
 create unique index poi_str_id_idx on poi (str_id);

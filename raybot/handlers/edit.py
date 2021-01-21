@@ -21,6 +21,7 @@ from aiogram.utils.exceptions import TelegramAPIError
 
 
 HOUSE_CB = CallbackData('ehouse', 'hid')
+FLOOR_CB = CallbackData('efloor', 'floor')
 BOOL_CB = CallbackData('boolattr', 'attr', 'value')
 PHOTO_CB = CallbackData('ephoto', 'name', 'which')
 TAG_CB = CallbackData('etag', 'tag')
@@ -181,6 +182,7 @@ async def print_edit_options(user: types.User, state: FSMContext, comment=None):
     lines.append(f'/ekey <b>Ключевые слова:</b> {format(poi.keywords)}')
     lines.append(f'/etag <b>OSM-тег:</b> {format(poi.tag)}')
     lines.append(f'/ehouse <b>Адрес:</b> {format(poi.house_name)}')
+    lines.append(f'/efloor <b>Этаж:</b> {format(poi.floor)}')
     lines.append(f'/eaddr <b>Местонахождение:</b> {format(poi.address_part)}')
     lines.append(f'/ehour <b>Часы работы:</b> {format(poi.hours_src)}')
     lines.append('/eloc <b>Координаты:</b> '
@@ -446,6 +448,37 @@ async def update_house(query: types.CallbackQuery, callback_data: Dict[str, str]
     await print_edit_options(query.from_user, state)
 
 
+@dp.message_handler(commands='efloor', state=EditState.confirm)
+async def edit_floor(message: types.Message, state: FSMContext):
+    poi = (await state.get_data())['poi']
+    floors = await db.get_floors_by_house(poi.house)
+    if floors and floors != [None]:
+        kbd = types.InlineKeyboardMarkup(row_width=3)
+        for floor in floors:
+            if floor is not None:
+                kbd.insert(types.InlineKeyboardButton(
+                    floor, callback_data=FLOOR_CB.new(floor=floor)))
+        kbd.insert(types.InlineKeyboardButton(
+            'Оставить как есть', callback_data='cancel_attr'))
+    else:
+        kbd = cancel_attr_kbd()
+    await EditState.attr.set()
+    await state.update_data(attr='floor')
+    await message.answer(config.MSG['editor']['floor'] + ' ' + config.MSG['editor']['dash'],
+                         reply_markup=kbd)
+
+
+@dp.callback_query_handler(FLOOR_CB.filter(), state=EditState.attr)
+async def update_floor(query: types.CallbackQuery, callback_data: Dict[str, str],
+                       state: FSMContext):
+    poi = (await state.get_data())['poi']
+    floor = callback_data['floor']
+    poi.floor = floor if floor != '-' else None
+    await EditState.confirm.set()
+    await state.set_data({'poi': poi})
+    await print_edit_options(query.from_user, state)
+
+
 @dp.message_handler(commands='ewifi', state=EditState.confirm)
 async def edit_wifi(message: types.Message, state: FSMContext):
     await message.answer(config.MSG['editor']['wifi'], reply_markup=boolean_kbd('wifi'))
@@ -643,6 +676,8 @@ async def store_attr(message: types.Message, state: FSMContext):
         poi.description = None if value == '-' else value
     elif attr == 'comment':
         poi.comment = None if value == '-' else value
+    elif attr == 'floor':
+        poi.floor = None if value == '-' else value.lower()
     elif attr == 'tag':
         if value == '-':
             poi.tag = None

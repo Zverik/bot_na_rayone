@@ -80,8 +80,21 @@ async def print_specific_poi(message: types.Message, regexp_command, state: FSMC
 async def in_house_callback(query: types.CallbackQuery, callback_data: Dict[str, str],
                             state: FSMContext):
     house = callback_data['house']
+    floor = callback_data['floor']
     data = await db.get_poi_by_key(house)
-    pois = await db.get_poi_by_house(house)
+    pois = await db.get_poi_by_house(house, None if floor == '-' else floor)
+    if floor == '-' and len(pois) > 9:
+        floors = await db.get_floors_by_house(house)
+        if len(floors) >= 2 and None not in floors:
+            # We have floors - add another selection
+            kbd = types.InlineKeyboardMarkup(row_width=3)
+            for ifloor in floors:
+                kbd.insert(types.InlineKeyboardButton(
+                    ifloor, callback_data=POI_HOUSE_CB.new(house=house, floor=ifloor)))
+            await bot.send_message(query.from_user.id, config.MSG['choose_floor'],
+                                   reply_markup=kbd)
+            return
+
     if not pois:
         await query.answer('Заведений нет')
     elif len(pois) == 1:
