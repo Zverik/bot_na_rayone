@@ -160,10 +160,11 @@ async def find_poi(keywords: str) -> List[POI]:
     return [POI(r) async for r in cursor]
 
 
-async def poi_with_empty_value(field: str, buildings: bool = False) -> List[POI]:
+async def poi_with_empty_value(field: str, buildings: bool = False,
+                               entrances: bool = True) -> List[POI]:
     no_buildings = "and (poi.tag is null or poi.tag != 'building') "
-    needs_floor = ("and (poi.tag is null or poi.tag != 'entrance') "
-                   "and poi.house in (select distinct house from poi "
+    no_entrances = "and (poi.tag is null or poi.tag not in ('building', 'entrance')) "
+    needs_floor = ("and poi.house in (select distinct house from poi "
                    "where house is not null and flor is not null "
                    "and in_index and delete_reason is null) ")
     query = ("select poi.*, h.name as h_address from poi "
@@ -172,6 +173,7 @@ async def poi_with_empty_value(field: str, buildings: bool = False) -> List[POI]
              "{b}{f}"
              "and poi.{k} is null order by updated desc".format(
                  k=field, b='' if buildings else no_buildings,
+                 e='' if entrances else no_entrances,
                  f=needs_floor if field == 'flor' else ''))
     db = await get_db()
     cursor = await db.execute(query)

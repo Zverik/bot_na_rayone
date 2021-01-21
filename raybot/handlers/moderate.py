@@ -221,7 +221,8 @@ async def print_deleted(message: types.Message, state: FSMContext):
 
 
 async def print_missing_value(user: types.User, k: str, state: FSMContext):
-    pois = await db.poi_with_empty_value(k, k != 'house')
+    pois = await db.poi_with_empty_value(k, buildings=k != 'house',
+                                         entrances=k not in ('flor', 'keywords'))
     if not pois:
         await bot.send_message(user.id, 'Нет таких.')
         return
