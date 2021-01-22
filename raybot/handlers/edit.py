@@ -677,7 +677,7 @@ async def store_attr(message: types.Message, state: FSMContext):
     elif attr == 'comment':
         poi.comment = None if value == '-' else value
     elif attr == 'floor':
-        poi.floor = None if value == '-' else value.lower()
+        poi.floor = None if value == '-' else value
     elif attr == 'tag':
         if value == '-':
             poi.tag = None

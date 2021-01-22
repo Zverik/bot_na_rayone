@@ -155,7 +155,7 @@ def describe_poi(poi: POI):
         )))
     if poi.house_name or poi.address_part:
         address = ', '.join(
-            [s for s in (poi.house_name, poi.floor, uncap(poi.address_part)) if s])
+            [s for s in (poi.house_name, uncap(poi.floor), uncap(poi.address_part)) if s])
         part2.append(f'🏠 {address}.')
     if poi.has_wifi is True:
         part2.append('📶 Есть бесплатный Wi-Fi.')
