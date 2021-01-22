@@ -1,15 +1,20 @@
 import os
 import hashlib
 from collections import defaultdict
+from io import StringIO
+from datetime import datetime
+from tempfile import TemporaryDirectory
 from PIL import Image
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
 from raybot.util import h, HTML, get_user, forget_user
+from raybot.actions import transfer
 from raybot.actions.poi import print_poi, POI_EDIT_CB, print_poi_list, PoiState
 from typing import Dict
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
+from aiogram.utils.exceptions import TelegramAPIError
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.handler import SkipHandler
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -23,6 +28,7 @@ ADMIN_CB = CallbackData('admin', 'action')
 
 class ModState(StatesGroup):
     mod = State()
+    admin_upload = State()
 
 
 @dp.message_handler(commands='queue', state='*')
@@ -319,6 +325,51 @@ async def delete_unused_photos():
     return len(photos)
 
 
+@dp.message_handler(state=ModState.admin_upload, content_types=types.ContentType.DOCUMENT)
+async def upload_document(message: types.Message, state: FSMContext):
+    tmp_dir = TemporaryDirectory(prefix='raybot')
+    file_id = message.document.file_id
+    try:
+        f = await bot.get_file(file_id)
+        path = os.path.join(tmp_dir.name, 'telegram_file')
+        await f.download(path)
+    except TelegramAPIError:
+        tmp_dir.cleanup()
+        await message.answer(config.MSG['editor']['upload_fail'])
+        return
+    if not os.path.exists(path):
+        tmp_dir.cleanup()
+        await message.answer(config.MSG['editor']['upload_fail'])
+        return
+
+    file_type = transfer.get_file_type(path)
+    try:
+        if file_type == 'geojson':
+            with open(path, 'r') as f:
+                await transfer.import_geojson(f)
+            await message.answer(
+                config.MSG['admin']['up_json'] + ' ' + config.MSG['admin']['no_maintenance'])
+        elif file_type == 'tags':
+            with open(path, 'r') as f:
+                yaml = await transfer.import_tags(f)
+            if yaml:
+                doc = types.InputFile(yaml, filename='new_tags.yml')
+                await message.answer_document(
+                    doc, caption='Файл с новыми тегами. Добавьте их в config/tags.yml.')
+                yaml.close()
+            await message.answer(
+                config.MSG['admin']['up_csv'] + ' ' + config.MSG['admin']['no_maintenance'])
+        else:
+            raise ValueError('Непонятный тип файла')
+    except Exception as e:
+        await message.answer(f'Ошибка: {e}. Попробуйте снова.')
+        return
+    finally:
+        tmp_dir.cleanup()
+    config.MAINTENANCE = False
+    await state.finish()
+
+
 @dp.message_handler(commands='admin', state='*')
 async def admin_info(message: types.Message):
     info = await get_user(message.from_user)
@@ -334,6 +385,8 @@ async def admin_info(message: types.Message):
                                               callback_data=ADMIN_CB.new(action='dedup')))
         kbd.insert(types.InlineKeyboardButton('Подчистить фото',
                                               callback_data=ADMIN_CB.new(action='unused')))
+        kbd.insert(types.InlineKeyboardButton('База заведений...',
+                                              callback_data=ADMIN_CB.new(action='base')))
     kbd.insert(types.InlineKeyboardButton('Перестроить индекс',
                                           callback_data=ADMIN_CB.new(action='reindex')))
     kbd.row(
@@ -381,5 +434,48 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         await print_missing_value(user, 'keywords', state)
     elif action == 'mis-tag':
         await print_missing_value(user, 'tag', state)
+    elif action == 'base':
+        # Print a submenu
+        kbd = types.InlineKeyboardMarkup(row_width=2)
+        kbd.insert(types.InlineKeyboardButton('Скачать заведения',
+                                              callback_data=ADMIN_CB.new(action='down-json')))
+        kbd.insert(types.InlineKeyboardButton('Скачать теги',
+                                              callback_data=ADMIN_CB.new(action='down-tags')))
+        kbd.insert(types.InlineKeyboardButton('Прислать файл',
+                                              callback_data=ADMIN_CB.new(action='upload')))
+        kbd.insert(types.InlineKeyboardButton(
+            'Заморозить базу' if not config.MAINTENANCE else 'Разморозить базу',
+            callback_data=ADMIN_CB.new(action='maintenance')))
+        await bot.edit_message_reply_markup(
+            query.from_user.id, query.message.message_id, reply_markup=kbd)
+    elif action == 'upload':
+        await bot.send_message(query.from_user.id, 'Пришлите файл с GeoJSON или тегами.')
+        await ModState.admin_upload.set()
+    elif action == 'down-json':
+        f = StringIO()
+        await transfer.export_geojson(f)
+        f.seek(0)
+        date = datetime.now().strftime('%y%m%d')
+        doc = types.InputFile(f, filename=f'poi-{date}.geojson')
+        caption = config.MSG['admin']['down_json'] + ' ' + config.MSG['admin']['maintenance']
+        await bot.send_document(query.from_user.id, doc, caption=caption)
+        config.MAINTENANCE = True
+        f.close()
+    elif action == 'down-tags':
+        f = StringIO()
+        await transfer.export_tags(f)
+        f.seek(0)
+        date = datetime.now().strftime('%y%m%d')
+        doc = types.InputFile(f, filename=f'tags-{date}.csv')
+        caption = config.MSG['admin']['down_tags'] + ' ' + config.MSG['admin']['maintenance']
+        await bot.send_document(query.from_user.id, doc, caption=caption)
+        config.MAINTENANCE = True
+        f.close()
+    elif action == 'maintenance':
+        config.MAINTENANCE = not config.MAINTENANCE
+        if config.MAINTENANCE:
+            await query.answer(config.MSG['admin']['maintenance'])
+        else:
+            await query.answer(config.MSG['admin']['no_maintenance'])
     else:
         await query.answer(f'Неизвестный action: {action}')
