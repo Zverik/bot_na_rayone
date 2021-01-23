@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, split_tokens, get_buttons, get_map, get_user
+from raybot.util import h, HTML, split_tokens, get_buttons, get_map, get_user, delete_msg
 from raybot.actions.poi import POI_EDIT_CB, POI_LIST_CB
 from raybot.actions.messages import broadcast_str, broadcast
 import re
@@ -62,6 +62,7 @@ def valid_location(loc):
 
 @dp.callback_query_handler(state=EditState.all_states, text='cancel')
 async def new_cancel(query: types.CallbackQuery, state: FSMContext):
+    await delete_msg(query, state)
     await state.finish()
     await bot.send_message(
         query.from_user.id,
@@ -219,8 +220,10 @@ async def print_edit_options(user: types.User, state: FSMContext, comment=None):
         comment = config.MSG['new_poi']['confirm2']
     if comment:
         content += '\n\n' + h(comment)
-    await bot.send_message(user.id, content, parse_mode=HTML, reply_markup=new_keyboard(),
-                           disable_web_page_preview=True)
+    reply = await bot.send_message(
+        user.id, content, parse_mode=HTML, reply_markup=new_keyboard(),
+        disable_web_page_preview=True)
+    await state.update_data(reply=reply.message_id)
 
 
 def cancel_attr_kbd():
@@ -318,6 +321,7 @@ async def upload_photo(message: types.Message, state: FSMContext):
         types.InlineKeyboardButton('🗑️ Ой, удали', callback_data=PHOTO_CB.new(
             name=name, which='del' if downloaded else 'skip'))
     )
+    await delete_msg(message, state)
     await message.answer(config.MSG['editor']['photo'], reply_markup=kbd)
 
 
@@ -326,6 +330,10 @@ async def store_photo(query: types.CallbackQuery, callback_data: Dict[str, str],
                       state: FSMContext):
     poi = (await state.get_data())['poi']
     name = callback_data['name']
+    path = os.path.join(config.PHOTOS, name + '.jpg')
+    if not os.path.exists(path):
+        await query.answer('Ваша фотография потерялась. Попробуйте ещё раз.')
+        return
     which = callback_data['which']
     if which == 'out':
         poi.photo_out = name
@@ -337,11 +345,11 @@ async def store_photo(query: types.CallbackQuery, callback_data: Dict[str, str],
         elif poi.photo_in == name:
             poi.photo_in = None
     elif which == 'del':
-        path = os.path.join(config.PHOTOS, name + '.jpg')
         os.remove(path)
         await query.answer('Хорошо, фоточку удалили.')
     else:
         await query.answer('Хорошо, фоточку забыли.')
+    await delete_msg(query)
     await state.set_data({'poi': poi})
     await print_edit_options(query.from_user, state)
 
@@ -352,62 +360,86 @@ async def message_intro(message: types.Message, state: FSMContext):
     if user.is_moderator():
         await message.answer('Вы же модератор, сделайте сами!')
         return
-    await message.answer(config.MSG['editor']['message'], reply_markup=cancel_attr_kbd())
+    await delete_msg(message, state)
+    reply = await message.answer(
+        config.MSG['editor']['message'], reply_markup=cancel_attr_kbd())
     await EditState.message.set()
+    await state.update_data(reply=reply.message_id)
+
+
+async def print_edit_message(message: types.Message, state: FSMContext,
+                             attr: str, dash: bool = False, poi_attr: str = None,
+                             msg_attr: str = None, kbd=None, value='-',
+                             content: str = None):
+    reply0 = None
+    if value is not None:
+        poi = (await state.get_data())['poi']
+        if value == '-':
+            pvalue = getattr(poi, poi_attr or attr)
+        else:
+            pvalue = value(poi)
+        if pvalue:
+            reply0 = (await message.answer(str(pvalue))).message_id
+
+    if not content:
+        content = config.MSG['editor'][msg_attr or attr]
+        if dash:
+            content += ' ' + config.MSG['editor']['dash']
+    if not kbd:
+        kbd = cancel_attr_kbd()
+    await delete_msg(message, state)
+    reply = await message.answer(content, reply_markup=kbd)
+    await EditState.attr.set()
+    await state.update_data(attr=attr, reply=[reply.message_id, reply0])
 
 
 @dp.message_handler(commands='ename', state=EditState.confirm)
 async def edit_name(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['name'], reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='name')
+    await print_edit_message(message, state, 'name')
 
 
 @dp.message_handler(commands='edesc', state=EditState.confirm)
 async def edit_desc(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['desc'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='desc')
+    await print_edit_message(message, state, 'desc', dash=True, poi_attr='description')
 
 
 @dp.message_handler(commands='etag', state=EditState.confirm)
 async def edit_tag(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['tag'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=tag_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='tag')
+    await print_edit_message(message, state, 'tag', dash=True, kbd=tag_kbd())
 
 
 @dp.message_handler(commands='ecom', state=EditState.confirm)
 async def edit_comment(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['comment'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='comment')
+    await print_edit_message(message, state, 'comment', dash=True)
 
 
 @dp.message_handler(commands='ekey', state=EditState.confirm)
 async def edit_keywords(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['keywords'], reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='keywords')
+    await print_edit_message(message, state, 'keywords')
 
 
 @dp.message_handler(commands='eaddr', state=EditState.confirm)
 async def edit_address(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['address'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='address')
+    await print_edit_message(message, state, 'address', dash=True)
 
 
 @dp.message_handler(commands='eloc', state=EditState.confirm)
 async def edit_location(message: types.Message, state: FSMContext):
     poi = (await state.get_data())['poi']
-    await message.answer(config.MSG['editor']['location'], reply_markup=edit_loc_kbd(poi))
-    await EditState.attr.set()
-    await state.update_data(attr='location')
+    await print_edit_message(message, state, 'location', value=None,
+                             kbd=edit_loc_kbd(poi))
+
+
+@dp.message_handler(commands='ephone', state=EditState.confirm)
+async def edit_phones(message: types.Message, state: FSMContext):
+    await print_edit_message(message, state, 'phones', dash=True,
+                             value=lambda p: '; '.join(p.phones))
+
+
+@dp.message_handler(commands='ehour', state=EditState.confirm)
+async def edit_hours(message: types.Message, state: FSMContext):
+    await print_edit_message(message, state, 'hours', dash=True,
+                             poi_attr='hours_src')
 
 
 @dp.message_handler(commands='ehouse', state=EditState.confirm)
@@ -416,6 +448,7 @@ async def edit_house(message: types.Message, state: FSMContext):
     houses = await db.get_houses()
     houses.sort(key=lambda h: poi.location.distance(h.location))
     houses = houses[:3]
+
     # Prepare the map
     map_file = get_map([h.location for h in houses], ref=poi.location)
     # Prepare the keyboard
@@ -426,7 +459,9 @@ async def edit_house(message: types.Message, state: FSMContext):
             f'{prefix} {i} {house.name}', callback_data=HOUSE_CB.new(hid=house.key)))
     kbd.add(types.InlineKeyboardButton(
         'Оставить как есть', callback_data='cancel_attr'))
+
     # Finally send the reply
+    await delete_msg(message, state)
     if map_file:
         await message.answer_photo(types.InputFile(map_file.name),
                                    caption=config.MSG['editor']['house'], reply_markup=kbd)
@@ -444,6 +479,7 @@ async def update_house(query: types.CallbackQuery, callback_data: Dict[str, str]
     h_data = await db.get_poi_by_key(hid)
     if h_data:
         poi.house_name = h_data.name
+    await delete_msg(query)
     await state.set_data({'poi': poi})
     await print_edit_options(query.from_user, state)
 
@@ -462,10 +498,8 @@ async def edit_floor(message: types.Message, state: FSMContext):
             'Оставить как есть', callback_data='cancel_attr'))
     else:
         kbd = cancel_attr_kbd()
-    await EditState.attr.set()
-    await state.update_data(attr='floor')
-    await message.answer(config.MSG['editor']['floor'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=kbd)
+    await print_edit_message(message, state, 'floor', dash=True,
+                             kbd=kbd, value=None)
 
 
 @dp.callback_query_handler(FLOOR_CB.filter(), state=EditState.attr)
@@ -474,6 +508,7 @@ async def update_floor(query: types.CallbackQuery, callback_data: Dict[str, str]
     poi = (await state.get_data())['poi']
     floor = callback_data['floor']
     poi.floor = floor if floor != '-' else None
+    await delete_msg(query)
     await EditState.confirm.set()
     await state.set_data({'poi': poi})
     await print_edit_options(query.from_user, state)
@@ -481,12 +516,18 @@ async def update_floor(query: types.CallbackQuery, callback_data: Dict[str, str]
 
 @dp.message_handler(commands='ewifi', state=EditState.confirm)
 async def edit_wifi(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['wifi'], reply_markup=boolean_kbd('wifi'))
+    await delete_msg(message, state)
+    reply = await message.answer(
+        config.MSG['editor']['wifi'], reply_markup=boolean_kbd('wifi'))
+    await state.update_data(reply=reply.message_id)
 
 
 @dp.message_handler(commands='ecard', state=EditState.confirm)
 async def edit_cards(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['cards'], reply_markup=boolean_kbd('cards'))
+    await delete_msg(message, state)
+    reply = await message.answer(
+        config.MSG['editor']['cards'], reply_markup=boolean_kbd('cards'))
+    await state.update_data(reply=reply.message_id)
 
 
 @dp.callback_query_handler(BOOL_CB.filter(), state=EditState.confirm)
@@ -505,6 +546,7 @@ async def update_boolean(query: types.CallbackQuery, callback_data: Dict[str, st
         poi.accepts_cards = value
     else:
         query.answer(f'Неизвестное поле {attr}')
+    await delete_msg(query)
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
     await print_edit_options(query.from_user, state)
@@ -515,6 +557,7 @@ async def update_tag(query: types.CallbackQuery, callback_data: Dict[str, str],
                      state: FSMContext):
     poi = (await state.get_data())['poi']
     poi.tag = callback_data['tag']
+    await delete_msg(query)
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
     await print_edit_options(query.from_user, state)
@@ -529,25 +572,7 @@ async def edit_links(message: types.Message, state: FSMContext):
     else:
         content = 'Пока нет ни одной ссылки.'
     content += '\n\n' + config.MSG['editor']['links']
-    await message.answer(content, disable_web_page_preview=True, reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='links')
-
-
-@dp.message_handler(commands='ephone', state=EditState.confirm)
-async def edit_phones(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['phones'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='phones')
-
-
-@dp.message_handler(commands='ehour', state=EditState.confirm)
-async def edit_hours(message: types.Message, state: FSMContext):
-    await message.answer(config.MSG['editor']['hours'] + ' ' + config.MSG['editor']['dash'],
-                         reply_markup=cancel_attr_kbd())
-    await EditState.attr.set()
-    await state.update_data(attr='hours')
+    await print_edit_message(message, state, 'links', value=None, content=content)
 
 
 @dp.message_handler(commands='delete', state=EditState.confirm)
@@ -581,6 +606,7 @@ async def undelete_poi(message: types.Message, state: FSMContext):
 
 @dp.callback_query_handler(text='cancel_attr', state=EditState.all_states)
 async def cancel_attr(query: types.CallbackQuery, state: FSMContext):
+    await delete_msg(query, state)
     await EditState.confirm.set()
     await print_edit_options(query.from_user, state)
 
@@ -597,6 +623,7 @@ async def store_location(message: types.Message, state: FSMContext):
         await message.answer(config.MSG['new_poi']['no_location'], reply_markup=edit_loc_kbd(poi))
         return
     poi.location = loc
+    await delete_msg(message, state)
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
     await print_edit_options(message.from_user, state)
@@ -747,6 +774,7 @@ async def store_attr(message: types.Message, state: FSMContext):
     else:
         await message.answer(f'Атрибут {attr} пока не редактируем.')
 
+    await delete_msg(message, state)
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
     await print_edit_options(message.from_user, state)
@@ -801,6 +829,7 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
         return
 
     # Reset state and thank the user
+    await delete_msg(query, state)
     await state.finish()
     kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton('👀 Посмотреть заведение',

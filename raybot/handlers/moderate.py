@@ -8,7 +8,7 @@ from PIL import Image
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, get_user, forget_user
+from raybot.util import h, HTML, get_user, forget_user, delete_msg
 from raybot.actions import transfer
 from raybot.actions.poi import print_poi, POI_EDIT_CB, print_poi_list, PoiState
 from typing import Dict
@@ -379,14 +379,14 @@ async def admin_info(message: types.Message):
     if info.id == config.ADMIN:
         kbd.insert(types.InlineKeyboardButton('Модераторы',
                                               callback_data=ADMIN_CB.new(action='mod')))
-        kbd.insert(types.InlineKeyboardButton('Аудит',
-                                              callback_data=ADMIN_CB.new(action='audit')))
         kbd.insert(types.InlineKeyboardButton('Дедубл. фото',
                                               callback_data=ADMIN_CB.new(action='dedup')))
         kbd.insert(types.InlineKeyboardButton('Подчистить фото',
                                               callback_data=ADMIN_CB.new(action='unused')))
         kbd.insert(types.InlineKeyboardButton('База заведений...',
                                               callback_data=ADMIN_CB.new(action='base')))
+    kbd.insert(types.InlineKeyboardButton('Аудит',
+                                          callback_data=ADMIN_CB.new(action='audit')))
     kbd.insert(types.InlineKeyboardButton('Перестроить индекс',
                                           callback_data=ADMIN_CB.new(action='reindex')))
     kbd.row(
@@ -405,6 +405,7 @@ async def admin_info(message: types.Message):
 @dp.callback_query_handler(ADMIN_CB.filter(), state='*')
 async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str],
                         state: FSMContext):
+    await delete_msg(query)
     user = query.from_user
     info = await get_user(user)
     if not info.is_moderator():
@@ -422,7 +423,7 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
     elif action == 'unused' and user.id == config.ADMIN:
         cnt = await delete_unused_photos(user)
         await bot.send_message(f'Удалили {cnt} неиспользованных фото.')
-    elif action == 'audit' and user.id == config.ADMIN:
+    elif action == 'audit':
         await print_audit(user)
     elif action == 'mis-house':
         await print_missing_value(user, 'house', state)
@@ -448,10 +449,10 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
             callback_data=ADMIN_CB.new(action='maintenance')))
         await bot.edit_message_reply_markup(
             query.from_user.id, query.message.message_id, reply_markup=kbd)
-    elif action == 'upload':
+    elif action == 'upload' and user.id == config.ADMIN:
         await bot.send_message(query.from_user.id, 'Пришлите файл с GeoJSON или тегами.')
         await ModState.admin_upload.set()
-    elif action == 'down-json':
+    elif action == 'down-json' and user.id == config.ADMIN:
         f = StringIO()
         await transfer.export_geojson(f)
         f.seek(0)
@@ -461,7 +462,7 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
-    elif action == 'down-tags':
+    elif action == 'down-tags' and user.id == config.ADMIN:
         f = StringIO()
         await transfer.export_tags(f)
         f.seek(0)
@@ -471,7 +472,7 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
-    elif action == 'maintenance':
+    elif action == 'maintenance' and user.id == config.ADMIN:
         config.MAINTENANCE = not config.MAINTENANCE
         if config.MAINTENANCE:
             await query.answer(config.MSG['admin']['maintenance'])
