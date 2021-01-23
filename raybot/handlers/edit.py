@@ -412,7 +412,7 @@ async def print_edit_message(message: types.Message, state: FSMContext,
     if not kbd:
         kbd = cancel_attr_kbd()
     await delete_msg(message, state)
-    reply = await message.answer(content, reply_markup=kbd)
+    reply = await message.answer(content, reply_markup=kbd, disable_web_page_preview=True)
     await EditState.attr.set()
     await state.update_data(attr=attr, reply=[reply.message_id, reply0])
 
