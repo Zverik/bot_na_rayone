@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, split_tokens, get_buttons, get_map, get_user, delete_msg
+from raybot.util import h, HTML, split_tokens, get_buttons, get_map, get_user
 from raybot.actions.poi import POI_EDIT_CB, POI_LIST_CB
 from raybot.actions.messages import broadcast_str, broadcast
 import re
@@ -12,12 +12,12 @@ import humanized_opening_hours as hoh
 from aiosqlite import DatabaseError
 from string import ascii_lowercase
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Union
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.utils.exceptions import TelegramAPIError
+from aiogram.utils.exceptions import TelegramAPIError, MessageToDeleteNotFound
 
 
 HOUSE_CB = CallbackData('ehouse', 'hid')
@@ -272,6 +272,30 @@ async def next_page(query: types.CallbackQuery, callback_data: Dict[str, str]):
     kbd = tag_kbd(int(callback_data['page']))
     await bot.edit_message_reply_markup(
         query.from_user.id, query.message.message_id, reply_markup=kbd)
+
+
+async def delete_msg(source: Union[types.Message, types.CallbackQuery],
+                     message_id: Union[int, FSMContext] = None):
+    user_id = source.from_user.id
+    if isinstance(message_id, FSMContext):
+        message_id = (await message_id.get_data()).get('reply')
+    if isinstance(source, types.CallbackQuery):
+        if isinstance(message_id, list):
+            message_id.append(source.message.message_id)
+        else:
+            message_id = source.message.message_id
+
+    if message_id:
+        if not isinstance(message_id, list):
+            message_id = [message_id]
+        for msg_id in message_id:
+            if msg_id:
+                try:
+                    await bot.delete_message(user_id, msg_id)
+                except MessageToDeleteNotFound:
+                    pass
+                except TelegramAPIError:
+                    logging.exception('Failed to delete bot message')
 
 
 @dp.message_handler(commands='ephoto', state=EditState.confirm)

@@ -1,15 +1,11 @@
 from raybot import config
-from raybot.bot import bot
 from raybot.model import db, UserInfo, Location
 from aiogram import types
-from aiogram.dispatcher import FSMContext
-from aiogram.utils.exceptions import TelegramAPIError, MessageToDeleteNotFound
-from typing import List, Union
+from typing import List
 import re
 import time
 import base64
 import struct
-import logging
 
 
 userdata = {}
@@ -119,27 +115,3 @@ def uncap(s: str) -> str:
     if not s:
         return s
     return s[0].lower() + s[1:]
-
-
-async def delete_msg(source: Union[types.Message, types.CallbackQuery],
-                     message_id: Union[int, FSMContext] = None):
-    user_id = source.from_user.id
-    if isinstance(message_id, FSMContext):
-        message_id = (await message_id.get_data()).get('reply')
-    if isinstance(source, types.CallbackQuery):
-        if isinstance(message_id, list):
-            message_id.append(source.message.message_id)
-        else:
-            message_id = source.message.message_id
-
-    if message_id:
-        if not isinstance(message_id, list):
-            message_id = [message_id]
-        for msg_id in message_id:
-            if msg_id:
-                try:
-                    await bot.delete_message(user_id, msg_id)
-                except MessageToDeleteNotFound:
-                    pass
-                except TelegramAPIError:
-                    logging.exception('Failed to delete bot message')

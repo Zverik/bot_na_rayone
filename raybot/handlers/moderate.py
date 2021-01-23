@@ -8,7 +8,7 @@ from PIL import Image
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, get_user, forget_user, delete_msg
+from raybot.util import h, HTML, get_user, forget_user
 from raybot.actions import transfer
 from raybot.actions.poi import print_poi, POI_EDIT_CB, print_poi_list, PoiState
 from typing import Dict
@@ -405,7 +405,6 @@ async def admin_info(message: types.Message):
 @dp.callback_query_handler(ADMIN_CB.filter(), state='*')
 async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str],
                         state: FSMContext):
-    await delete_msg(query)
     user = query.from_user
     info = await get_user(user)
     if not info.is_moderator():
