@@ -91,8 +91,8 @@ async def in_house_callback(query: types.CallbackQuery, callback_data: Dict[str,
             for ifloor in floors:
                 kbd.insert(types.InlineKeyboardButton(
                     ifloor, callback_data=POI_HOUSE_CB.new(house=house, floor=ifloor)))
-            await bot.send_message(query.from_user.id, config.MSG['choose_floor'],
-                                   reply_markup=kbd)
+            await bot.edit_message_reply_markup(
+                query.from_user.id, query.message.message_id, reply_markup=kbd)
             return
 
     if not pois:
