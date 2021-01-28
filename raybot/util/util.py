@@ -33,16 +33,10 @@ SYNONIMS = reverse_synonims()
 
 
 def has_keyword(token, keywords, kwsuffix=''):
-    found = False
     for k in keywords:
-        if k.endswith('*'):
-            if not kwsuffix:
-                found = token.startswith(k[:-1])
-        else:
-            found = token == k + kwsuffix
-        if found:
-            break
-    return found
+        if token == k + kwsuffix:
+            return True
+    return False
 
 
 async def get_user(user: types.User):
