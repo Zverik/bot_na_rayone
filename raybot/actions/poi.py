@@ -18,10 +18,11 @@ HTML = types.ParseMode.HTML
 POI_LIST_CB = CallbackData('poi', 'id')
 POI_LOCATION_CB = CallbackData('poiloc', 'id')
 POI_SIMILAR_CB = CallbackData('similar', 'id')
-POI_EDIT_CB = CallbackData('poiedit', 'id')
+POI_EDIT_CB = CallbackData('poiedit', 'id', 'd')
 POI_FULL_CB = CallbackData('plst', 'query', 'ids')
 POI_HOUSE_CB = CallbackData('poih', 'house', 'floor')
 POI_STAR_CB = CallbackData('poistar', 'id', 'action')
+REVIEW_HOUSE_CB = CallbackData('hreview', 'house')
 
 
 class PoiState(StatesGroup):
@@ -190,9 +191,9 @@ async def make_poi_keyboard(user: types.User, poi: POI):
     ))
 
     buttons.append(types.InlineKeyboardButton(
-        config.MSG['location'], callback_data=POI_LOCATION_CB.new(id=poi.id)))
+        config.MSG['loc_btn'], callback_data=POI_LOCATION_CB.new(id=poi.id)))
     buttons.append(types.InlineKeyboardButton(
-        config.MSG['edit_poi'], callback_data=POI_EDIT_CB.new(id=poi.id)))
+        config.MSG['edit_poi'], callback_data=POI_EDIT_CB.new(id=poi.id, d='0')))
 
     if poi.links:
         link_dict = dict(poi.links)
@@ -216,18 +217,27 @@ async def make_poi_keyboard(user: types.User, poi: POI):
     return kbd
 
 
-async def make_house_keyboard(poi: POI):
+async def make_house_keyboard(user: types.User, poi: POI):
     if not poi.key:
         return None
     pois = await db.get_poi_by_house(poi.key)
     if not pois:
         return None
 
-    return types.InlineKeyboardMarkup().add(
+    kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
             config.MSG['poi_in_house'],
             callback_data=POI_HOUSE_CB.new(house=poi.key, floor='-'))
     )
+    info = await get_user(user)
+    if info.is_moderator():
+        # Suggest reviewing
+        kbd.insert(
+            types.InlineKeyboardButton(
+                config.MSG['review']['start'],
+                callback_data=REVIEW_HOUSE_CB.new(house=poi.key))
+        )
+    return kbd
 
 
 def log_poi(poi: POI):
@@ -271,7 +281,7 @@ async def print_poi(user: types.User, poi: POI, comment: str = None, buttons: bo
 
     # Prepare the inline keyboard
     if poi.tag == 'building':
-        kbd = await make_house_keyboard(poi)
+        kbd = await make_house_keyboard(user, poi)
     else:
         kbd = None if not buttons else await make_poi_keyboard(user, poi)
 

@@ -3,7 +3,7 @@ import logging
 import os
 import json
 from raybot import config
-from .entities import POI, UserInfo, QueueMessage
+from .entities import POI, UserInfo, QueueMessage, Location
 from typing import List, Dict, Tuple
 
 
@@ -52,13 +52,16 @@ async def get_poi_by_ids(poi_ids: List[int]) -> POI:
 
 
 async def get_poi_by_house(house: str, floor: str = None) -> POI:
+    """Pass '-' for floor to query only empty floors."""
+    query = ("select * from poi where house = ? and in_index and delete_reason is null "
+             "and (tag is null or tag not in ('entrance', 'building'))")
+    if floor == '-':
+        query += " and flor is null"
+        args = (house, )
     if floor:
-        query = ("select * from poi where house = ? and in_index and delete_reason is null "
-                 "and (tag is null or tag not in ('entrance', 'building')) and flor = ?")
+        query += " and flor = ?"
         args = (house, floor)
     else:
-        query = ("select * from poi where house = ? and in_index and delete_reason is null "
-                 "and (tag is null or tag not in ('entrance', 'building'))")
         args = (house,)
     db = await get_db()
     cursor = await db.execute(query, args)
@@ -148,6 +151,33 @@ async def set_star(user_id: int, poi_id: int, star: bool):
         query = "delete from stars where poi_id = ? and user_id = ?"
     await db.execute(query, (poi_id, user_id))
     await db.commit()
+
+
+async def get_poi_around(loc: Location, count: int = 40, floor: str = None,
+                         dist: int = 50) -> List[POI]:
+    # We don't have a spatial index, so we're just inventing a bounding box
+    # approximately 100 × 100 meters.
+    args = []
+    if floor == '-':
+        qfloor = 'flor is null and'
+    elif floor is not None:
+        qfloor = 'flor = ? and'
+        args.append(floor)
+    else:
+        qfloor = ''
+    query = (f"select * from poi where {qfloor} "
+             "lat > ? and lat < ? and lon > ? and lon < ? "
+             "and (tag is null or tag not in ('building', 'entrance')) "
+             "and delete_reason is null "
+             f"limit {count*2}")
+    radius = 0.001
+    args.extend([loc.lat - radius, loc.lat + radius, loc.lon - radius, loc.lon + radius])
+    db = await get_db()
+    cursor = await db.execute(query, tuple(args))
+    pois = [POI(r) async for r in cursor]
+    pois = sorted([p for p in pois if loc.distance(p.location) <= dist],
+                  key=lambda p: loc.distance(p.location))
+    return pois[:count]
 
 
 async def find_poi(keywords: str) -> List[POI]:
@@ -503,3 +533,24 @@ async def reindex():
     )
     await conn.execute("drop table tag_keywords")
     await conn.commit()
+
+
+async def get_poi_ages(poi_ids: List[int]) -> Dict[int, int]:
+    """Receives a list of poi and returns a dict poi_id -> age in hours."""
+    query = ("select id, strftime('%s', current_timestamp) - strftime('%s', updated) "
+             "from poi where id in ({})".format(','.join('?' * len(poi_ids))))
+    db = await get_db()
+    cursor = await db.execute(query, tuple(poi_ids))
+    return {r[0]: round(r[1] / 3600) async for r in cursor}
+
+
+async def set_updated(poi_id: int, updated: str = None) -> str:
+    db = await get_db()
+    cursor = await db.execute("select updated from poi where id = ?", (poi_id,))
+    old = await cursor.fetchone()
+    if not updated:
+        await db.execute("update poi set updated = current_timestamp where id = ?", (poi_id,))
+    else:
+        await db.execute("update poi set updated = ? where id = ?", (updated, poi_id))
+    await db.commit()
+    return old[0]

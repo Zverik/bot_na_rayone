@@ -118,7 +118,7 @@ async def print_next_queued(user: types.User):
         )
     else:
         kbd.insert(types.InlineKeyboardButton(
-            '📝 Поправить', callback_data=POI_EDIT_CB.new(id=q.poi_id)))
+            '📝 Поправить', callback_data=POI_EDIT_CB.new(id=q.poi_id, d='0')))
     kbd.insert(types.InlineKeyboardButton(
         config.MSG['queue']['delete'],
         callback_data=MSG_CB.new(action='del', id=str(q.id)))

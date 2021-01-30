@@ -64,10 +64,16 @@ def valid_location(loc):
 async def new_cancel(query: types.CallbackQuery, state: FSMContext):
     await delete_msg(query, state)
     await state.finish()
+    user = await get_user(query.from_user)
+    if user.review:
+        kbd = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(
+            '🗒️ Продолжить осмотр', callback_data='continue_review'))
+    else:
+        kbd = get_buttons()
     await bot.send_message(
         query.from_user.id,
         config.MSG['new_poi']['cancel'],
-        reply_markup=get_buttons()
+        reply_markup=kbd
     )
 
 
@@ -90,6 +96,8 @@ async def edit_poi(query: types.CallbackQuery, callback_data: Dict[str, str],
     if config.MAINTENANCE:
         await bot.send_message(query.from_user.id, config.MSG['maintenance'])
         return
+    if callback_data['d'] == '1':
+        await delete_msg(query)
     poi = await db.get_poi_by_id(int(callback_data['id']))
     await state.set_data({'poi': poi})
     await EditState.confirm.set()
@@ -860,4 +868,7 @@ async def new_save(query: types.CallbackQuery, state: FSMContext):
                                    callback_data=POI_LIST_CB.new(id=poi_id)),
         types.InlineKeyboardButton('➕ Добавить новое', callback_data='new')
     )
+    if user.review:
+        kbd.insert(types.InlineKeyboardButton(
+            '🗒️ Продолжить осмотр', callback_data='continue_review'))
     await bot.send_message(query.from_user.id, config.MSG['editor'][saved], reply_markup=kbd)

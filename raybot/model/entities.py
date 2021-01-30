@@ -126,6 +126,8 @@ class UserInfo:
     location_time: int = 0  # To forget location after 5 minutes
     last_access: int = 0  # Last access time
     roles: List[str] = field(default_factory=list)
+    review: List[list] = None  # For review: list of (poi_id, old_updated)
+    review_ctx: Tuple[str, str] = None  # Tuple of (house, floor)
 
     def __init__(self, user=None, user_id=None, user_name=None):
         if user:

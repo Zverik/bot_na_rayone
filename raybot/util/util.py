@@ -1,7 +1,9 @@
 from raybot import config
 from raybot.model import db, UserInfo, Location
 from aiogram import types
-from typing import List
+from aiogram.dispatcher import FSMContext
+from aiogram.utils.exceptions import TelegramAPIError, MessageToDeleteNotFound
+from typing import List, Union
 import re
 import time
 import base64
@@ -12,7 +14,7 @@ userdata = {}
 SKIP_TOKENS = set(config.RESP['skip'])
 # Markdown requires too much escaping, so we're using HTML
 HTML = types.ParseMode.HTML
-PRUNE_TIMEOUT = 600
+PRUNE_TIMEOUT = 10  # minutes
 
 
 def reverse_synonims():
@@ -60,7 +62,7 @@ def prune_users(except_id: int) -> List[int]:
     for user_id in list(userdata.keys()):
         if user_id != except_id:
             data = userdata.get(user_id)
-            if data and time.time() - data.last_access > PRUNE_TIMEOUT:
+            if data and time.time() - data.last_access > PRUNE_TIMEOUT * 60:
                 pruned.append(user_id)
                 del userdata[user_id]
     return pruned
@@ -109,3 +111,27 @@ def uncap(s: str) -> str:
     if not s:
         return s
     return s[0].lower() + s[1:]
+
+
+async def delete_msg(bot, source: Union[types.Message, types.CallbackQuery],
+                     message_id: Union[int, FSMContext] = None):
+    user_id = source.from_user.id
+    if isinstance(message_id, FSMContext):
+        message_id = (await message_id.get_data()).get('reply')
+    if isinstance(source, types.CallbackQuery):
+        if isinstance(message_id, list):
+            message_id.append(source.message.message_id)
+        else:
+            message_id = source.message.message_id
+
+    if message_id:
+        if not isinstance(message_id, list):
+            message_id = [message_id]
+        for msg_id in message_id:
+            if msg_id:
+                try:
+                    await bot.delete_message(user_id, msg_id)
+                except MessageToDeleteNotFound:
+                    pass
+                except TelegramAPIError:
+                    pass

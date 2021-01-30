@@ -88,6 +88,20 @@ async def process(message: types.Message, state: FSMContext):
 async def process_query(message, state, tokens):
     query = ' '.join(tokens)
     pois = await db.find_poi(query)
+    if not pois and len(tokens) > 2:
+        # Attempt a search with one less tokens
+        for ti in range(len(tokens)):
+            query = ' '.join(tokens[i] for i in range(len(tokens)) if i != ti)
+            new_pois = await db.find_poi(query)
+            if new_pois and (not pois or len(pois) > len(new_pois)):
+                pois = new_pois
+    if not pois and len(tokens) > 1:
+        # Attemt a search with just one token
+        for t in tokens:
+            new_pois = await db.find_poi(t)
+            if new_pois and (not pois or len(pois) > len(new_pois)):
+                pois = new_pois
+
     if len(pois) == 1:
         write_search_log(message, tokens, f'poi {pois[0].id}')
         await PoiState.poi.set()
@@ -152,4 +166,12 @@ async def set_loc(message):
     location = Location(message.location.longitude, message.location.latitude)
     info = await get_user(message.from_user)
     info.location = location
-    await message.answer(config.MSG['location'])
+    if info.is_moderator():
+        # Suggest review mode
+        kbd = types.InlineKeyboardMarkup().add(
+            types.InlineKeyboardButton(
+                config.MSG['review']['start'], callback_data='start_review')
+        )
+    else:
+        kbd = get_buttons()
+    await message.answer(config.MSG['location'], reply_markup=kbd)
