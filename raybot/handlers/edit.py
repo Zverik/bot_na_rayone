@@ -444,7 +444,7 @@ async def edit_keywords(message: types.Message, state: FSMContext):
 
 @dp.message_handler(commands='eaddr', state=EditState.confirm)
 async def edit_address(message: types.Message, state: FSMContext):
-    await print_edit_message(message, state, 'address', dash=True)
+    await print_edit_message(message, state, 'address', dash=True, poi_attr='address_part')
 
 
 @dp.message_handler(commands='eloc', state=EditState.confirm)
