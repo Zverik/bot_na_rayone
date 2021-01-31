@@ -418,10 +418,10 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         await bot.send_message(user.id, 'Поисковый индекс перестроен.')
     elif action == 'dedup' and user.id == config.ADMIN:
         cnt = await dedup_photos()
-        await bot.send_message(f'Удалили {cnt} дубликатов фото.')
+        await bot.send_message(query.from_user.id, f'Удалили {cnt} дубликатов фото.')
     elif action == 'unused' and user.id == config.ADMIN:
         cnt = await delete_unused_photos()
-        await bot.send_message(f'Удалили {cnt} неиспользованных фото.')
+        await bot.send_message(query.from_user.id, f'Удалили {cnt} неиспользованных фото.')
     elif action == 'audit':
         await print_audit(user)
     elif action == 'mis-house':
