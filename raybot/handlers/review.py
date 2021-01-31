@@ -113,9 +113,10 @@ async def start_review(user: types.User, house: str = None, floor: str = None):
         pois.sort(key=lambda p: ref.distance(p.location))
     else:
         pois = await db.get_poi_around(info.location, count=30, floor=floor)
-    # Sort by "not reviewed in the past ten hours"
-    ages = await db.get_poi_ages([p.id for p in pois])
-    pois.sort(key=lambda p: 0 if ages[p.id] > 10 else 1)
+    if len(pois) > 14:
+        # Sort by "not reviewed in the past ten hours"
+        ages = await db.get_poi_ages([p.id for p in pois])
+        pois.sort(key=lambda p: 0 if ages[p.id] > 10 else 1)
     # Start review and print the review panel
     info.review = [[p.id, None] for p in pois[:14]]
     info.review_ctx = (house, floor)
