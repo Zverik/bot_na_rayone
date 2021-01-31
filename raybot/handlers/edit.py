@@ -13,6 +13,7 @@ from aiosqlite import DatabaseError
 from string import ascii_lowercase
 from datetime import datetime
 from typing import Dict, Union
+from collections import Counter
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher import FSMContext
@@ -215,7 +216,8 @@ async def print_edit_options(user: types.User, state: FSMContext, comment=None):
         photos = 'только внутри'
     else:
         photos = 'нет'
-    lines.append(f'<b>Фотографии:</b> {photos} (залейте замену или /ephoto для просмотра)')
+    lines.append(f'<b>Фотографии:</b> {photos} (залейте замену или /ephoto для просмотра, '
+                 '/eout для копирования фото снаружи)')
     if poi.id:
         if poi.delete_reason:
             lines.append(f'<b>Удалено:</b> {format(poi.delete_reason)}. Восстановить: /undelete')
@@ -321,6 +323,45 @@ async def show_photos(message: types.Message, state: FSMContext):
                 )
                 await message.answer_photo(types.InputFile(path), caption=where,
                                            reply_markup=kbd)
+
+
+@dp.message_handler(commands='eout', state=EditState.confirm)
+async def suggest_photo_out(message: types.Message, state: FSMContext):
+    poi = (await state.get_data())['poi']
+    pois = await db.get_poi_around(poi.location, 10, floor=poi.floor)
+    photos = [p.photo_out for p in pois if p.photo_out]
+    if not photos:
+        await message.answer('Нет фотографий вокруг.')
+        return
+
+    photo_dist = {
+        name: min(poi.location.distance(p.location) for p in pois if p.photo_out == name)
+        for name in photos
+    }
+    photo_cnt = Counter(photos)
+    photos = sorted(photo_cnt, key=lambda p: (100 - photo_cnt[p], photo_dist.get(p, 1000)))
+    photos = photos[:3]
+
+    kbd = types.InlineKeyboardMarkup(row_width=5)
+    media = types.MediaGroup()
+    for i, photo in enumerate(photos, 1):
+        path = os.path.join(config.PHOTOS, photo + '.jpg')
+        if os.path.exists(path):
+            file_ids = await db.find_file_ids({photo: os.path.getsize(path)})
+            if photo in file_ids:
+                media.attach_photo(file_ids[photo])
+            else:
+                media.attach_photo(types.InputFile(path))
+            kbd.insert(types.InlineKeyboardButton(
+                str(i), callback_data=PHOTO_CB.new(name=photo, which='out')))
+    kbd.insert(types.InlineKeyboardButton(
+        config.MSG['editor']['cancel'], callback_data='cancel_attr'))
+    await delete_msg(message, state)
+    msg = await bot.send_media_group(message.from_user.id, media=media)
+    msg2 = await message.answer('Выберите фотографию.', reply_markup=kbd)
+    replies = msg.message_id if not isinstance(msg, list) else [m.message_id for m in msg]
+    replies.append(msg2.message_id)
+    await state.update_data(reply=replies)
 
 
 @dp.message_handler(state=EditState.confirm, content_types=types.ContentType.PHOTO)

@@ -154,7 +154,7 @@ async def set_star(user_id: int, poi_id: int, star: bool):
 
 
 async def get_poi_around(loc: Location, count: int = 40, floor: str = None,
-                         dist: int = 50) -> List[POI]:
+                         dist: int = 100) -> List[POI]:
     # We don't have a spatial index, so we're just inventing a bounding box
     # approximately 100 × 100 meters.
     args = []

@@ -15,7 +15,7 @@ from aiogram.dispatcher import FSMContext
 @dp.message_handler(commands=['start'], state='*')
 async def welcome(message: types.Message, state: FSMContext):
     await state.finish()
-    await message.answer(config.RESP['start'].replace('\n', '\n\n'), reply_markup=get_buttons())
+    await message.answer(config.RESP['start'], reply_markup=get_buttons())
     payload = message.get_args()
     if payload:
         try:
@@ -118,6 +118,10 @@ async def process_query(message, state, tokens):
             types.InlineKeyboardButton('💬 Сообщить модераторам', callback_data='missing_mod'),
             types.InlineKeyboardButton('➕ Добавить заведение', callback_data='new')
         )
+        user = await get_user(message.from_user)
+        if user.review:
+            new_kbd.insert(types.InlineKeyboardButton(
+                '🗒️ Продолжить осмотр', callback_data='continue_review'))
         await message.answer(config.MSG['not_found'].replace('%s', message.text),
                              reply_markup=new_kbd)
 

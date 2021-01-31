@@ -3,7 +3,7 @@ from raybot.model import db, UserInfo, Location
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import TelegramAPIError, MessageToDeleteNotFound
-from typing import List, Union
+from typing import List, Union, Dict
 import re
 import time
 import base64
@@ -88,6 +88,18 @@ def h(s: str) -> str:
     if not s:
         return s
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def trn(opts: Dict[str, str], n: int) -> str:
+    if not n:
+        k = '5'
+    elif n % 100 == 1 and n != 11:
+        k = '1'
+    elif n % 100 in (2, 3, 4) and n not in (12, 13, 14):
+        k = '2'
+    else:
+        k = '5'
+    return opts.get(k, opts['5'])
 
 
 def get_buttons(rows=None):

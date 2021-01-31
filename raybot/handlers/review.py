@@ -1,11 +1,12 @@
 from raybot import config
-from raybot.model import db, POI
+from raybot.model import db, POI, Location
 from raybot.bot import bot, dp
 from raybot.util import get_user, get_buttons, delete_msg
 from raybot.actions.poi import POI_EDIT_CB, REVIEW_HOUSE_CB
 from typing import Dict, List
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
+from aiogram.dispatcher.handler import SkipHandler
 
 
 FLOOR_CB = CallbackData('sreview', 'house', 'floor')
@@ -112,6 +113,10 @@ async def start_review(user: types.User, house: str = None, floor: str = None):
         pois.sort(key=lambda p: ref.distance(p.location))
     else:
         pois = await db.get_poi_around(info.location, count=30, floor=floor)
+    # Sort by "not reviewed in the past ten hours"
+    ages = await db.get_poi_ages([p.id for p in pois])
+    pois.sort(key=lambda p: 0 if ages[p.id] > 10 else 1)
+    # Start review and print the review panel
     info.review = [[p.id, None] for p in pois[:14]]
     info.review_ctx = (house, floor)
     await print_review_message(user)
@@ -218,3 +223,14 @@ async def edit_mode(query: types.CallbackQuery, callback_data: Dict[str, str]):
     kbd = await make_review_keyboard(pois, callback_data['mode'] == 'edit')
     await bot.edit_message_reply_markup(
         query.from_user.id, query.message.message_id, reply_markup=kbd)
+
+
+@dp.message_handler(content_types=types.ContentType.LOCATION, state='*')
+async def set_loc(message):
+    info = await get_user(message.from_user)
+    if not info.review or not info.review_ctx:
+        raise SkipHandler
+    # Save location and continue the review
+    location = Location(message.location.longitude, message.location.latitude)
+    info.location = location
+    await start_review(message.from_user, *info.review_ctx)
