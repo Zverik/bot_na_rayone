@@ -25,6 +25,9 @@
 с кодом и файлами в `config/` что хотите. Документация (этот текст и всё
 в `docs/`) опубликованы под CC-BY 4.0.
 
+Устанавливая этого бота, вы соглашаетесь на выгрузку заведений из него
+в открытый проект OpenStreetMap.
+
 ## In English
 
 This is a Telegram bot for searching for addresses and amenities
@@ -39,3 +42,6 @@ future, but if they get help, they might prepare a different-language
 version.
 
 Written by Ilya Zverev. Code is published under ISC, documentation is CC-BY 4.0.
+
+Installing this bot, you agree to uploading your shops and amenities into
+OpenStreetMap.
