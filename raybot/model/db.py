@@ -168,8 +168,7 @@ async def get_poi_around(loc: Location, count: int = 40, floor: str = None,
     query = (f"select * from poi where {qfloor} "
              "lat > ? and lat < ? and lon > ? and lon < ? "
              "and (tag is null or tag not in ('building', 'entrance')) "
-             "and delete_reason is null "
-             f"limit {count*2}")
+             "and delete_reason is null")
     radius = 0.001
     args.extend([loc.lat - radius, loc.lat + radius, loc.lon - radius, loc.lon + radius])
     db = await get_db()

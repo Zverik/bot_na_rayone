@@ -51,12 +51,6 @@ async def start_review_callback(query: types.CallbackQuery):
         await start_review(query.from_user, *info.review_ctx)
         return
     pois = await db.get_poi_around(info.location, count=10)
-
-    # If the nearest poi doesn't have floor, then so be it
-    if pois and pois[0].floor is None:
-        await start_review(query.from_user)
-        return
-
     # Find floor options
     await check_floors(query, pois)
 
@@ -148,7 +142,7 @@ async def print_review_message(user: types.User, pois: List[POI] = None):
         if not info.review:
             return
         pois = await db.get_poi_by_ids([r[0] for r in info.review])
-    OH_REPL = {DOW[i]: tr(('edit', 'hours_abbr'))[i] for i in range(7)}
+    OH_REPL = {DOW[i]: tr(('editor', 'hours_abbr'))[i] for i in range(7)}
     content = tr(('review', 'list')) + '\n'
     if len(pois) == 14:
         content += '\n' + tr(('review', 'incomplete')) + '\n'

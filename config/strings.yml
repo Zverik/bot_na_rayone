@@ -114,8 +114,8 @@ editor:
   cant_restore: 'Восстановить заведение может только модератор. Напишите им: /msg'
   restored: Заведение снова можно найти.
   wrong_attr: Атрибут %s пока не редактируем.
-  yes: да
-  no: нет
+  bool_yes: да
+  bool_no: нет
   unknown: неизвестно
   bool_true: Есть
   bool_false: Нет

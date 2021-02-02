@@ -11,6 +11,7 @@ from raybot import config
 from typing import Dict
 from aiogram import types
 from aiogram.dispatcher import FSMContext, filters
+from aiogram.utils.exceptions import MessageNotModified
 
 
 @dp.callback_query_handler(POI_FULL_CB.filter(), state='*')
@@ -61,8 +62,11 @@ async def star_poi(query: types.CallbackQuery, callback_data: Dict[str, str]):
     elif action == 'del':
         await db.set_star(user.id, poi.id, False)
     kbd = await make_poi_keyboard(user, poi)
-    await bot.edit_message_reply_markup(
-        user.id, query.message.message_id, reply_markup=kbd)
+    try:
+        await bot.edit_message_reply_markup(
+            user.id, query.message.message_id, reply_markup=kbd)
+    except MessageNotModified:
+        pass
 
 
 @dp.message_handler(filters.RegexpCommandsFilter(regexp_commands=['poi([0-9]+)']), state='*')

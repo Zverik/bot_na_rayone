@@ -166,7 +166,7 @@ def format(v, yes=None, no=None, null=None):
     if isinstance(v, str):
         return h(v)
     if isinstance(v, bool):
-        return (yes or tr(('editor', 'yes'))) if v else (no or tr(('editor', 'no')))
+        return (yes or tr(('editor', 'bool_yes'))) if v else (no or tr(('editor', 'bool_no')))
     if isinstance(v, (int, float)):
         return v
     if isinstance(v, hoh.OHParser):
@@ -344,7 +344,8 @@ async def suggest_photo_out(message: types.Message, state: FSMContext):
         for name in photos
     }
     photo_cnt = Counter(photos)
-    photos = sorted(photo_cnt, key=lambda p: (100 - photo_cnt[p], photo_dist.get(p, 1000)))
+    photos = sorted(photo_cnt, key=lambda p: (int(photo_dist.get(p, 1000) / 10),
+                                              100 - photo_cnt[p]))
     photos = photos[:3]
 
     kbd = types.InlineKeyboardMarkup(row_width=5)
@@ -680,7 +681,12 @@ async def undelete_poi(message: types.Message, state: FSMContext):
     poi = (await state.get_data())['poi']
     await db.restore_poi(message.from_user.id, poi)
     await state.finish()
-    await message.answer(tr(('editor', 'restored')), reply_markup=get_buttons())
+    if user.review:
+        kbd = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(
+            '🗒️ ' + tr(('review', 'continue')), callback_data='continue_review'))
+    else:
+        kbd = get_buttons()
+    await message.answer(tr(('editor', 'restored')), reply_markup=kbd)
 
 
 @dp.callback_query_handler(text='cancel_attr', state=EditState.all_states)
@@ -850,7 +856,13 @@ async def store_attr(message: types.Message, state: FSMContext):
     elif attr == 'delete':
         await db.delete_poi(message.from_user.id, poi, value)
         await state.finish()
-        await message.answer(tr(('editor', 'deleted')), reply_markup=get_buttons())
+        user = await get_user(message.from_user)
+        if user.review:
+            kbd = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton(
+                '🗒️ ' + tr(('review', 'continue')), callback_data='continue_review'))
+        else:
+            kbd = get_buttons()
+        await message.answer(tr(('editor', 'deleted')), reply_markup=kbd)
         await broadcast_str(tr(('editor', 'just_deleted'), id=poi.id, reason=value),
                             message.from_user.id)
         return
