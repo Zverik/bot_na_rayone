@@ -1,6 +1,5 @@
-from raybot import config
 from raybot.bot import bot, dp
-from raybot.util import get_user
+from raybot.util import get_user, tr
 from raybot.actions.messages import broadcast, process_reply
 from aiogram import types
 from aiogram.dispatcher import FSMContext
@@ -16,9 +15,9 @@ class MsgState(StatesGroup):
 async def message_info(message: types.Message):
     info = await get_user(message.from_user)
     if info.is_moderator():
-        await message.answer('Себе сообщения слать нельзя.')
+        await message.answer(tr('message_self'))
         return
-    await message.answer(config.MSG['message'])
+    await message.answer(tr('message'))
     await MsgState.sending.set()
 
 
@@ -26,9 +25,9 @@ async def message_info(message: types.Message):
 async def message_info_callback(query: types.CallbackQuery):
     info = await get_user(query.from_user)
     if info.is_moderator():
-        await query.answer('Себе сообщения слать нельзя.')
+        await query.answer(tr('message_self'))
         return
-    await bot.send_message(query.from_user.id, config.MSG['message'])
+    await bot.send_message(query.from_user.id, tr('message'))
     await MsgState.sending.set()
 
 

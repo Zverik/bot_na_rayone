@@ -1,6 +1,6 @@
 from raybot import config
 from raybot.bot import bot
-from raybot.util import get_user
+from raybot.util import get_user, tr
 from raybot.model import db
 from asyncio import sleep
 from aiogram import types
@@ -9,7 +9,7 @@ from aiogram import types
 async def broadcast(message: types.Message):
     mods = [config.ADMIN] + (await db.get_role_users('moderator'))
     for user_id in mods:
-        await bot.send_message(user_id, config.MSG['do_reply'])
+        await bot.send_message(user_id, tr('do_reply'))
         await message.forward(user_id)
         await sleep(0.5)
 
@@ -28,7 +28,7 @@ async def process_reply(message: types.Message):
     if info.is_moderator():
         # Notify other moderators that it has been replied
         # TODO: can we do it just once per user?
-        await broadcast_str(f'Отправлен ответ на сообщение {to.name}',
+        await broadcast_str(tr('reply_sent', to.name),
                             info.id, disable_notification=True)
-    await bot.send_message(to.id, config.MSG['do_reply'])
+    await bot.send_message(to.id, tr('do_reply'))
     await message.forward(to.id)

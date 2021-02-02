@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot
-from raybot.util import h, get_user, get_map, pack_ids, uncap
+from raybot.util import h, get_user, get_map, pack_ids, uncap, tr
 import csv
 import re
 import os
@@ -69,17 +69,19 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
         pois = pois[:max_buttons if full else max_buttons - 1]
 
     # Build the message
-    content = config.MSG['poi_list'].replace('%s', query) + '\n'
+    content = tr('poi_list', query) + '\n'
     for i, poi in enumerate(pois, 1):
         if poi.description:
             content += h(f'\n{i}. {poi.name} — {uncap(poi.description)}')
         else:
             content += h(f'\n{i}. {poi.name}')
+        if poi.hours and not poi.hours.is_open():
+            content += ' 🌒'
     if total_count > max_buttons:
         if not full:
-            content += '\n\n' + config.MSG['poi_not_full'].format(total_count=total_count)
+            content += '\n\n' + tr('poi_not_full', total_count=total_count)
         else:
-            content += '\n\n' + config.MSG['poi_too_many'].format(total_count=total_count)
+            content += '\n\n' + tr('poi_too_many', total_count=total_count)
     if comment:
         content += '\n\n' + comment
 
@@ -100,7 +102,7 @@ async def print_poi_list(user: types.User, query: str, pois: List[POI],
             # Too long
             callback_data = POI_FULL_CB.new(query=query[:55], ids='-')
         kbd.insert(types.InlineKeyboardButton(
-            f'🔽 Все {total_count}', callback_data=callback_data))
+            f'🔽 {config.MSG["all"]} {total_count}', callback_data=callback_data))
 
     # Make a map and send the message
     map_file = get_map([poi.location for poi in pois], ref=location)
@@ -119,11 +121,9 @@ def relative_day(next_day):
     if days < 1:
         opens_day = ''
     elif days == 1:
-        opens_day = 'завтра'
+        opens_day = tr('tomorrow')
     else:
-        DOW = ['в понедельник', 'во вторник', 'в среду', 'в четверг',
-               'в пятницу', 'в субботу', 'в воскресенье']
-        opens_day = DOW[next_day.weekday()]
+        opens_day = tr('relative_days')[next_day.weekday()]
     return opens_day
 
 
@@ -136,21 +136,21 @@ def describe_poi(poi: POI):
     part2 = []
     if poi.hours:
         if poi.hours.is_24_7:
-            part2.append('🌞 Открыто круглосуточно.')
+            part2.append('🌞 ' + tr('open_247'))
         elif poi.hours.is_open():
             closes = poi.hours.next_change()
-            open_now = f'☀️ Открыто сегодня до {closes.strftime("%H:%M")}.'
+            open_now = '☀️ ' + tr('now_open', closes.strftime("%H:%M"))
             if (closes - datetime.now()).seconds <= 3600 * 2:
                 opens = poi.hours.next_change(closes)
-                open_now += (f' {relative_day(opens).capitalize()} работает '
-                             f'с {opens.strftime("%H:%M").lstrip("0")}.')
+                open_now += ' ' + tr('next_open', day=relative_day(opens).capitalize(),
+                                     hour=opens.strftime("%H:%M").lstrip("0"))
             part2.append(open_now)
         else:
             opens = poi.hours.next_change()
-            part2.append(f'🌒 Закрыто. Откроется {relative_day(opens)} '
-                         f'в {opens.strftime("%H:%M").lstrip("0")}.')
+            part2.append('🌒 ' + tr('now_closed', day=relative_day(opens),
+                                   hour=opens.strftime("%H:%M").lstrip("0")))
     if poi.links and len(poi.links) > 1:
-        part2.append('🌐 Ссылки: {}.'.format(', '.join(
+        part2.append('🌐 ' + tr('poi_links') + ': {}.'.format(', '.join(
             ['<a href="{}">{}</a>'.format(h(link[1]), h(link[0]))
              for link in poi.links]
         )))
@@ -159,11 +159,11 @@ def describe_poi(poi: POI):
             [s for s in (poi.house_name, uncap(poi.floor), uncap(poi.address_part)) if s])
         part2.append(f'🏠 {address}.')
     if poi.has_wifi is True:
-        part2.append('📶 Есть бесплатный Wi-Fi.')
+        part2.append('📶 ' + tr('has_wifi'))
     if poi.accepts_cards is True:
-        part2.append('💳 Можно оплатить картой.')
+        part2.append('💳 ' + tr('accepts_cards'))
     elif poi.accepts_cards is False:
-        part2.append('💰 Оплата только наличными.')
+        part2.append('💰 ' + tr('no_cards'))
     if poi.phones:
         part2.append('📞 {}.'.format(', '.join(
             [re.sub(r'[^0-9+]', '', phone) for phone in poi.phones]
@@ -182,24 +182,24 @@ async def make_poi_keyboard(user: types.User, poi: POI):
     buttons = []
     stars, given_star = await db.count_stars(user.id, poi.id)
     if not given_star:
-        star_button = config.MSG['star']
+        star_button = '☆ ' + tr('star')
     else:
-        star_button = config.MSG['starred']
+        star_button = '⭐ ' + tr('starred')
     buttons.append(types.InlineKeyboardButton(
         star_button, callback_data=POI_STAR_CB.new(
             id=poi.id, action='del' if given_star else 'set')
     ))
 
     buttons.append(types.InlineKeyboardButton(
-        config.MSG['loc_btn'], callback_data=POI_LOCATION_CB.new(id=poi.id)))
+        '📍 ' + tr('loc_btn'), callback_data=POI_LOCATION_CB.new(id=poi.id)))
     buttons.append(types.InlineKeyboardButton(
-        config.MSG['edit_poi'], callback_data=POI_EDIT_CB.new(id=poi.id, d='0')))
+        '📝 ' + tr('edit_poi'), callback_data=POI_EDIT_CB.new(id=poi.id, d='0')))
 
     if poi.links:
         link_dict = dict(poi.links)
-        if config.MSG['default_link'] in link_dict:
-            link_title = 'Открыть сайт'
-            link = link_dict[config.MSG['default_link']]
+        if tr('default_link') in link_dict:
+            link_title = tr('open_link')
+            link = link_dict[tr('default_link')]
         else:
             link_title = poi.links[0][0]
             link = poi.links[0][1]
@@ -208,7 +208,7 @@ async def make_poi_keyboard(user: types.User, poi: POI):
     if poi.tag and poi.tag not in ('building', 'entrance'):
         emoji = config.TAGS['emoji'].get(poi.tag, config.TAGS['emoji']['default'])
         buttons.append(types.InlineKeyboardButton(
-            emoji + ' ' + config.MSG['similar'],
+            emoji + ' ' + tr('similar'),
             callback_data=POI_SIMILAR_CB.new(id=poi.id)
         ))
 
@@ -226,7 +226,7 @@ async def make_house_keyboard(user: types.User, poi: POI):
 
     kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
-            config.MSG['poi_in_house'],
+            tr('poi_in_house'),
             callback_data=POI_HOUSE_CB.new(house=poi.key, floor='-'))
     )
     info = await get_user(user)
@@ -234,7 +234,7 @@ async def make_house_keyboard(user: types.User, poi: POI):
         # Suggest reviewing
         kbd.insert(
             types.InlineKeyboardButton(
-                config.MSG['review']['start'],
+                tr(('review', 'start')),
                 callback_data=REVIEW_HOUSE_CB.new(house=poi.key))
         )
     return kbd

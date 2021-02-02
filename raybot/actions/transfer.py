@@ -1,7 +1,7 @@
 import json
 import csv
 import datetime
-from raybot.config import TAGS
+from raybot import config
 from raybot.model import db
 from io import StringIO
 
@@ -133,7 +133,7 @@ async def export_tags(f):
     w.writerow('id name tag type description comment address'.split())
     async for row in cur:
         row = list(row)
-        row[3] = TAGS['tags'].get(row[2], [''])[0]
+        row[3] = config.TAGS['tags'].get(row[2], [''])[0]
         w.writerow(row)
 
 
@@ -154,7 +154,7 @@ async def import_tags(f):
             continue
         if tag != poi_tags[poi_id]:
             await conn.execute("update poi set tag = ? where id = ?", (tag, poi_id))
-        if tag not in TAGS['tags']:
+        if tag not in config.TAGS['tags']:
             if tag not in new_tags or not new_tags[tag]:
                 new_tags[tag] = row['type'].strip()
     await conn.commit()

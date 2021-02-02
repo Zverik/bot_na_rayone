@@ -1,7 +1,7 @@
 from raybot import config
 from raybot.model import db, Location
 from raybot.bot import dp
-from raybot.util import split_tokens, has_keyword, get_user, h, HTML, get_buttons, prune_users
+from raybot.util import split_tokens, has_keyword, get_user, h, HTML, get_buttons, prune_users, tr
 from raybot.actions.addr import test_address
 from raybot.actions.poi import PoiState, print_poi, print_poi_list
 from raybot.actions.messages import process_reply
@@ -115,15 +115,14 @@ async def process_query(message, state, tokens):
     else:
         write_search_log(message, tokens, 'not found')
         new_kbd = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton('💬 Сообщить модераторам', callback_data='missing_mod'),
-            types.InlineKeyboardButton('➕ Добавить заведение', callback_data='new')
+            types.InlineKeyboardButton('💬 ' + tr('notify_mods'), callback_data='missing_mod'),
+            types.InlineKeyboardButton('➕ ' + tr('add_poi'), callback_data='new')
         )
         user = await get_user(message.from_user)
         if user.review:
             new_kbd.insert(types.InlineKeyboardButton(
-                '🗒️ Продолжить осмотр', callback_data='continue_review'))
-        await message.answer(config.MSG['not_found'].replace('%s', message.text),
-                             reply_markup=new_kbd)
+                '🗒️ ' + tr(('review', 'continue')), callback_data='continue_review'))
+        await message.answer(tr('not_found', message.text), reply_markup=new_kbd)
 
 
 async def test_predefined(message, tokens) -> bool:
@@ -174,8 +173,8 @@ async def set_loc(message):
         # Suggest review mode
         kbd = types.InlineKeyboardMarkup().add(
             types.InlineKeyboardButton(
-                config.MSG['review']['start'], callback_data='start_review')
+                tr(('review', 'start')), callback_data='start_review')
         )
     else:
         kbd = get_buttons()
-    await message.answer(config.MSG['location'], reply_markup=kbd)
+    await message.answer(tr('location'), reply_markup=kbd)

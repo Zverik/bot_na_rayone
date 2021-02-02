@@ -1,7 +1,6 @@
-from raybot import config
 from raybot.model import db, POI, Location
 from raybot.bot import bot, dp
-from raybot.util import get_user, get_buttons, delete_msg
+from raybot.util import get_user, get_buttons, delete_msg, DOW, tr
 from raybot.actions.poi import POI_EDIT_CB, REVIEW_HOUSE_CB
 from typing import Dict, List
 from aiogram import types
@@ -17,9 +16,9 @@ EDIT_CB = CallbackData('review_edit', 'mode')
 async def check_floors(query: types.CallbackQuery, pois: List[POI], house: str = None):
     if not pois:
         kbd = types.InlineKeyboardMarkup().add(
-            types.InlineKeyboardButton(config.MSG['add_poi'], callback_data='new')
+            types.InlineKeyboardButton(tr('add_poi'), callback_data='new')
         )
-        await bot.send_message(query.from_user.id, config.MSG['no_poi_around'], reply_markup=kbd)
+        await bot.send_message(query.from_user.id, tr('no_poi_around'), reply_markup=kbd)
         return
 
     floors = set([p.floor for p in pois])
@@ -27,11 +26,11 @@ async def check_floors(query: types.CallbackQuery, pois: List[POI], house: str =
         khouse = '-' if house is None else house
         kbd = types.InlineKeyboardMarkup(row_width=3)
         for ifloor in floors:
-            label = ifloor if ifloor is not None else config.MSG['review']['no_floor']
+            label = ifloor if ifloor is not None else tr(('review', 'no_floor'))
             kbd.insert(types.InlineKeyboardButton(
                 label, callback_data=FLOOR_CB.new(house=khouse, floor=ifloor or '-')))
         kbd.insert(types.InlineKeyboardButton(
-            config.MSG['review']['all_floors'],
+            tr(('review', 'all_floors')),
             callback_data=FLOOR_CB.new(house=khouse, floor='*')))
         await bot.edit_message_reply_markup(
             query.from_user.id, query.message.message_id, reply_markup=kbd)
@@ -45,7 +44,7 @@ async def start_review_callback(query: types.CallbackQuery):
     # First check the floors around
     info = await get_user(query.from_user)
     if not info.location:
-        await query.answer(config.MSG['review']['send_loc'])
+        await query.answer(tr(('review', 'send_loc')))
         return
     if info.review_ctx:
         # We have an ongoing review session, continue it
@@ -84,7 +83,7 @@ async def stop_review(query: types.CallbackQuery):
     info.review = None
     info.review_ctx = None
     await delete_msg(bot, query)
-    await bot.send_message(query.from_user.id, config.MSG['review']['stopped'],
+    await bot.send_message(query.from_user.id, tr(('review', 'stopped')),
                            reply_markup=get_buttons())
 
 
@@ -92,7 +91,7 @@ async def stop_review(query: types.CallbackQuery):
 async def continue_review(query: types.CallbackQuery):
     info = await get_user(query.from_user)
     if not info.review:
-        await query.answer(config.MSG['review']['no_review'])
+        await query.answer(tr(('review', 'no_review')))
         return
     await print_review_message(query.from_user)
 
@@ -107,7 +106,7 @@ async def start_review(user: types.User, house: str = None, floor: str = None):
         else:
             if len(pois) > 14:
                 info.review_ctx = (house, floor)
-                await bot.send_message(user.id, config.MSG['review']['too_many'])
+                await bot.send_message(user.id, tr(('review', 'too_many')))
                 return
             ref = pois[0].location
         pois.sort(key=lambda p: ref.distance(p.location))
@@ -149,11 +148,10 @@ async def print_review_message(user: types.User, pois: List[POI] = None):
         if not info.review:
             return
         pois = await db.get_poi_by_ids([r[0] for r in info.review])
-    OH_REPL = {'Mo': 'пн', 'Tu': 'вт', 'We': 'ср', 'Th': 'чт',
-               'Fr': 'пт', 'Sa': 'сб', 'Su': 'вс'}
-    content = config.MSG['review']['list'] + '\n'
+    OH_REPL = {DOW[i]: tr(('edit', 'hours_abbr'))[i] for i in range(7)}
+    content = tr(('review', 'list')) + '\n'
     if len(pois) == 14:
-        content += '\n' + config.MSG['review']['incomplete'] + '\n'
+        content += '\n' + tr(('review', 'incomplete')) + '\n'
     for i, poi in enumerate(pois, 1):
         p_start = f'\n{i}. «{poi.name}»'
         p_icons = ''
@@ -175,9 +173,9 @@ async def print_review_message(user: types.User, pois: List[POI] = None):
         if not poi.photo_in:
             p_absent += '📸'
         if p_absent:
-            p_absent = config.MSG['review']['absent'] + ' ' + p_absent
+            p_absent = tr(('review', 'absent')) + ' ' + p_absent
         if not poi.hours_src:
-            p_oh = config.MSG['review']['no_hours']
+            p_oh = tr(('review', 'no_hours'))
         else:
             p_oh = poi.hours_src.replace(':00', '')
             for k, v in OH_REPL.items():
@@ -191,13 +189,13 @@ async def print_review_message(user: types.User, pois: List[POI] = None):
 async def update_review(query: types.CallbackQuery, callback_data: Dict[str, str]):
     info = await get_user(query.from_user)
     if not info.review:
-        await query.answer(config.MSG['review']['no_review'])
+        await query.answer(tr(('review', 'no_review')))
         return
 
     poi_id = int(callback_data['id'])
     review_record = [r for r in info.review if r[0] == poi_id]
     if not review_record:
-        await query.answer(config.MSG['review']['no_record'])
+        await query.answer(tr(('review', 'no_record')))
         return
 
     if review_record[0][1]:
@@ -218,7 +216,7 @@ async def update_review(query: types.CallbackQuery, callback_data: Dict[str, str
 async def edit_mode(query: types.CallbackQuery, callback_data: Dict[str, str]):
     info = await get_user(query.from_user)
     if not info.review:
-        await query.answer(config.MSG['review']['no_review'])
+        await query.answer(tr(('review', 'no_review')))
         return
     pois = await db.get_poi_by_ids([r[0] for r in info.review])
     kbd = await make_review_keyboard(pois, callback_data['mode'] == 'edit')

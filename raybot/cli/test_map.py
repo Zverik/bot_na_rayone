@@ -1,6 +1,6 @@
 from raybot.util import get_map
 from raybot.model import Location
-from raybot.config import DATABASE
+from raybot import config
 import sys
 import sqlite3
 import logging
@@ -12,7 +12,7 @@ def run():
         sys.exit(1)
 
     locations = []
-    with sqlite3.connect(DATABASE) as conn:
+    with sqlite3.connect(config.DATABASE) as conn:
         for str_id in sys.argv[2].split(','):
             cursor = conn.execute("select lon, lat from poi where str_id = ?", (str_id,))
             row = cursor.fetchone()

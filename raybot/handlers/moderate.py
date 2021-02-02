@@ -8,7 +8,7 @@ from PIL import Image
 from raybot import config
 from raybot.model import db
 from raybot.bot import bot, dp
-from raybot.util import h, HTML, get_user, forget_user
+from raybot.util import h, HTML, get_user, forget_user, tr
 from raybot.actions import transfer
 from raybot.actions.poi import print_poi, POI_EDIT_CB, print_poi_list, PoiState
 from typing import Dict
@@ -44,14 +44,14 @@ async def print_next_added(user: types.User):
         return False
     poi = await db.get_next_unchecked()
     if not poi:
-        await bot.send_message(user.id, config.MSG['queue']['empty'])
+        await bot.send_message(user.id, tr(('queue', 'empty')))
         return True
     await print_poi(user, poi)
 
-    content = config.MSG['queue']['new_poi']
+    content = tr(('queue', 'new_poi'))
     kbd = types.InlineKeyboardMarkup().add(
         types.InlineKeyboardButton(
-            config.MSG['queue']['validated'],
+            '✔️ ' + tr(('queue', 'validated')),
             callback_data=POI_VALIDATE_CB.new(id=str(poi.id))
         )
     )
@@ -65,7 +65,7 @@ async def validate_poi(query: types.CallbackQuery, callback_data: Dict[str, str]
         await query.answer('POI пропал, странно.')
         return
     await db.validate_poi(poi.id)
-    await query.answer(config.MSG['queue']['validated_ok'])
+    await query.answer(tr(('queue', 'validated_ok')))
     await print_next_queued(query.from_user)
 
 
@@ -77,7 +77,7 @@ async def print_next_queued(user: types.User):
     queue = await db.get_queue(1)
     if not queue:
         # This is done inside print_next_added()
-        # await bot.send_message(user.id, config.MSG['queue']['empty'])
+        # await bot.send_message(user.id, tr(('queue', 'empty')))
         await print_next_added(user)
         return True
 
@@ -90,12 +90,10 @@ async def print_next_queued(user: types.User):
 
     photo = None
     if q.field == 'message':
-        content = config.MSG['queue']['message'].format(
-            user=h(q.user_name), name=h(poi.name))
+        content = tr(('queue', 'message'), user=h(q.user_name), name=h(poi.name))
         content += f'\n\n{h(q.new_value)}'
     else:
-        content = config.MSG['queue']['field'].format(
-            user=h(q.user_name), name=h(poi.name), field=q.field)
+        content = tr(('queue', 'field'), user=h(q.user_name), name=h(poi.name), field=q.field)
         content += '\n'
         vold = '<i>ничего</i>' if q.old_value is None else h(q.old_value)
         vnew = '<i>ничего</i>' if q.new_value is None else h(q.new_value)
@@ -109,18 +107,18 @@ async def print_next_queued(user: types.User):
     kbd = types.InlineKeyboardMarkup(row_width=3)
     if q.field != 'message':
         kbd.insert(types.InlineKeyboardButton(
-            config.MSG['queue']['look'],
+            '🔍 ' + tr(('queue', 'look')),
             callback_data=MSG_CB.new(action='look', id=str(q.id)))
         )
         kbd.insert(types.InlineKeyboardButton(
-            config.MSG['queue']['apply'],
+            '✅ ' + tr(('queue', 'apply')),
             callback_data=MSG_CB.new(action='apply', id=str(q.id)))
         )
     else:
         kbd.insert(types.InlineKeyboardButton(
-            '📝 Поправить', callback_data=POI_EDIT_CB.new(id=q.poi_id, d='0')))
+            '📝 ' + tr('edit_poi'), callback_data=POI_EDIT_CB.new(id=q.poi_id, d='0')))
     kbd.insert(types.InlineKeyboardButton(
-        config.MSG['queue']['delete'],
+        '❌ ' + tr(('queue', 'delete')),
         callback_data=MSG_CB.new(action='del', id=str(q.id)))
     )
 
@@ -142,10 +140,10 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
 
     if action == 'del':
         await db.delete_queue(q)
-        await query.answer(config.MSG['queue']['deleted'])
+        await query.answer(tr(('queue', 'deleted')))
     elif action == 'apply':
         await db.apply_queue(query.from_user.id, q)
-        await query.answer(config.MSG['queue']['applied'])
+        await query.answer(tr(('queue', 'applied')))
     elif action == 'look':
         poi = await db.get_poi_by_id(q.poi_id)
         if not poi:
@@ -335,11 +333,11 @@ async def upload_document(message: types.Message, state: FSMContext):
         await f.download(path)
     except TelegramAPIError:
         tmp_dir.cleanup()
-        await message.answer(config.MSG['editor']['upload_fail'])
+        await message.answer(tr(('editor', 'upload_fail')))
         return
     if not os.path.exists(path):
         tmp_dir.cleanup()
-        await message.answer(config.MSG['editor']['upload_fail'])
+        await message.answer(tr(('editor', 'upload_fail')))
         return
 
     file_type = transfer.get_file_type(path)
@@ -348,7 +346,7 @@ async def upload_document(message: types.Message, state: FSMContext):
             with open(path, 'r') as f:
                 await transfer.import_geojson(f)
             await message.answer(
-                config.MSG['admin']['up_json'] + ' ' + config.MSG['admin']['no_maintenance'])
+                tr(('admin', 'up_json')) + ' ' + tr(('admin', 'no_maintenance')))
         elif file_type == 'tags':
             with open(path, 'r') as f:
                 yaml = await transfer.import_tags(f)
@@ -358,7 +356,7 @@ async def upload_document(message: types.Message, state: FSMContext):
                     doc, caption='Файл с новыми тегами. Добавьте их в config/tags.yml.')
                 yaml.close()
             await message.answer(
-                config.MSG['admin']['up_csv'] + ' ' + config.MSG['admin']['no_maintenance'])
+                tr(('admin', 'up_csv')) + ' ' + tr(('admin', 'no_maintenance')))
         else:
             raise ValueError('Непонятный тип файла')
     except Exception as e:
@@ -457,7 +455,7 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         f.seek(0)
         date = datetime.now().strftime('%y%m%d')
         doc = types.InputFile(f, filename=f'poi-{date}.geojson')
-        caption = config.MSG['admin']['down_json'] + ' ' + config.MSG['admin']['maintenance']
+        caption = tr(('admin', 'down_json')) + ' ' + tr(('admin', 'maintenance'))
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
@@ -467,15 +465,15 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         f.seek(0)
         date = datetime.now().strftime('%y%m%d')
         doc = types.InputFile(f, filename=f'tags-{date}.csv')
-        caption = config.MSG['admin']['down_tags'] + ' ' + config.MSG['admin']['maintenance']
+        caption = tr(('admin', 'down_tags')) + ' ' + tr(('admin', 'maintenance'))
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
     elif action == 'maintenance' and user.id == config.ADMIN:
         config.MAINTENANCE = not config.MAINTENANCE
         if config.MAINTENANCE:
-            await query.answer(config.MSG['admin']['maintenance'])
+            await query.answer(tr(('admin', 'maintenance')))
         else:
-            await query.answer(config.MSG['admin']['no_maintenance'])
+            await query.answer(tr(('admin', 'no_maintenance')))
     else:
         await query.answer(f'Неизвестный action: {action}')

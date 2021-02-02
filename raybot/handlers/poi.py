@@ -6,7 +6,7 @@ from raybot.actions.poi import (
 )
 from raybot.model import db
 from raybot.bot import dp, bot
-from raybot.util import split_tokens, unpack_ids, save_location
+from raybot.util import split_tokens, unpack_ids, save_location, tr
 from raybot import config
 from typing import Dict
 from aiogram import types
@@ -37,7 +37,7 @@ async def poi_from_list(query: types.CallbackQuery, callback_data: Dict[str, str
                         state: FSMContext):
     poi = await db.get_poi_by_id(int(callback_data['id']))
     if not poi:
-        await query.answer('Что-то пошло не так — повторите запрос, пожалуйста.')
+        await query.answer(tr('query_fail'))
     else:
         await PoiState.poi.set()
         await state.set_data({'poi': poi.id})
@@ -69,7 +69,7 @@ async def star_poi(query: types.CallbackQuery, callback_data: Dict[str, str]):
 async def print_specific_poi(message: types.Message, regexp_command, state: FSMContext):
     poi = await db.get_poi_by_id(int(regexp_command.group(1)))
     if not poi:
-        await message.answer('Нет заведения с таким номером.')
+        await message.answer(tr('no_poi_key'))
     else:
         await PoiState.poi.set()
         await state.set_data({'poi': poi.id})
@@ -96,7 +96,7 @@ async def in_house_callback(query: types.CallbackQuery, callback_data: Dict[str,
             return
 
     if not pois:
-        await query.answer('Заведений нет')
+        await query.answer(tr('no_poi_in_house'))
     elif len(pois) == 1:
         await PoiState.poi.set()
         await state.set_data({'poi': pois[0].id})
@@ -112,11 +112,11 @@ async def simlar_poi(query: types.CallbackQuery, callback_data: Dict[str, str],
                      state: FSMContext):
     poi = await db.get_poi_by_id(int(callback_data['id']))
     if not poi or not poi.tag:
-        await query.answer('Что-то пошло не так — повторите запрос, пожалуйста.')
+        await query.answer(tr('query_fail'))
     else:
         pois = await db.get_poi_by_tag(poi.tag)
         if len(pois) == 1:
-            await query.answer(config.MSG['no_similar'])
+            await query.answer(tr('no_similar'))
         else:
             tag_names = config.TAGS['tags'].get(poi.tag)
             pquery = poi.tag if not tag_names else tag_names[0]
@@ -145,7 +145,7 @@ async def print_random(message: types.Message, state: FSMContext):
 async def print_starred(message: types.Message, state: FSMContext):
     pois = await db.get_starred_poi(message.from_user.id)
     if not pois:
-        await message.answer(config.MSG['no_starred'])
+        await message.answer(tr('no_starred'))
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'my', 'poi': [p.id for p in pois]})
@@ -156,7 +156,7 @@ async def print_starred(message: types.Message, state: FSMContext):
 async def print_popular(message: types.Message, state: FSMContext):
     pois = await db.get_popular_poi(9)
     if not pois:
-        await message.answer(config.MSG['no_popular'])
+        await message.answer(tr('no_popular'))
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'popular', 'poi': [p.id for p in pois]})

@@ -3,7 +3,7 @@ from raybot.model import db, UserInfo, Location
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 from aiogram.utils.exceptions import TelegramAPIError, MessageToDeleteNotFound
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Sequence
 import re
 import time
 import base64
@@ -11,10 +11,10 @@ import struct
 
 
 userdata = {}
-SKIP_TOKENS = set(config.RESP['skip'])
 # Markdown requires too much escaping, so we're using HTML
 HTML = types.ParseMode.HTML
-PRUNE_TIMEOUT = 10  # minutes
+SYNONIMS = {}
+DOW = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 
 
 def reverse_synonims():
@@ -29,9 +29,6 @@ def reverse_synonims():
             if kw:
                 result[v] = kw[0]
     return result
-
-
-SYNONIMS = reverse_synonims()
 
 
 def has_keyword(token, keywords, kwsuffix=''):
@@ -62,7 +59,7 @@ def prune_users(except_id: int) -> List[int]:
     for user_id in list(userdata.keys()):
         if user_id != except_id:
             data = userdata.get(user_id)
-            if data and time.time() - data.last_access > PRUNE_TIMEOUT * 60:
+            if data and time.time() - data.last_access > config.PRUNE_TIMEOUT * 60:
                 pruned.append(user_id)
                 del userdata[user_id]
     return pruned
@@ -74,11 +71,16 @@ def forget_user(user_id: int):
 
 
 def split_tokens(message, process=True):
+    global SYNONIMS
+    if not SYNONIMS:
+        SYNONIMS = reverse_synonims()
+
+    skip_tokens = set(config.RESP['skip'])
     s = message.strip().lower().replace('ё', 'е')
     tokens = re.split(r'[\s,.+=!@#$%^&*()\'"«»<>/?`~|_-]+', s)
     if process:
         tokens = [SYNONIMS.get(t, t) for t in tokens
-                  if len(t) > 0 and t not in SKIP_TOKENS]
+                  if len(t) > 0 and t not in skip_tokens]
     else:
         tokens = [t for t in tokens if len(t) > 0]
     return tokens
@@ -90,18 +92,6 @@ def h(s: str) -> str:
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def trn(opts: Dict[str, str], n: int) -> str:
-    if not n:
-        k = '5'
-    elif n % 100 == 1 and n != 11:
-        k = '1'
-    elif n % 100 in (2, 3, 4) and n not in (12, 13, 14):
-        k = '2'
-    else:
-        k = '5'
-    return opts.get(k, opts['5'])
-
-
 def get_buttons(rows=None):
     buttons = []
     for row in rows or config.RESP['buttons']:
@@ -110,7 +100,7 @@ def get_buttons(rows=None):
     return kbd
 
 
-def pack_ids(ids: List[int]) -> str:
+def pack_ids(ids: Sequence[int]) -> str:
     return base64.a85encode(struct.pack('h' * len(ids), *ids)).decode()
 
 
@@ -147,3 +137,42 @@ async def delete_msg(bot, source: Union[types.Message, types.CallbackQuery],
                     pass
                 except TelegramAPIError:
                     pass
+
+
+def _format(s: str, value, **kwargs) -> str:
+    if not s or (value is None and not kwargs):
+        return s
+    s = s.replace('%s', str(value))
+    for k, v in kwargs.items():
+        s = s.replace('{' + k + '}', str(v))
+    return s
+
+
+def _format_num(d: Dict[str, str], n: int, **kwargs) -> str:
+    if not n:
+        k = '5'
+    elif n % 100 == 1 and n != 11:
+        k = '1'
+    elif n % 100 in (2, 3, 4) and n not in (12, 13, 14):
+        k = '2'
+    else:
+        k = '5'
+    return format(d.get(k, d['5']), n, **kwargs)
+
+
+def _get_by_key(messages: dict, key: Union[str, Sequence[str]]):
+    if isinstance(key, str):
+        return messages[key]
+    m = messages
+    for k in key:
+        m = m[k]
+    return m
+
+
+def tr(key: Union[str, Sequence[str]], value=None, **kwargs):
+    d = _get_by_key(config.MSG, key)
+    if isinstance(d, str):
+        return _format(d, value, **kwargs)
+    if not isinstance(d, dict) or '5' not in d or not isinstance(value, int):
+        return d
+    return _format_num(d, value)

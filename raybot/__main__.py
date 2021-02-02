@@ -4,6 +4,7 @@ from raybot.cli import buildings, photos, test_map, missing
 import raybot.handlers  # noqa
 import logging
 import sys
+import os
 from aiogram import executor
 
 
@@ -12,7 +13,7 @@ async def shutdown(dp):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or os.path.isdir(sys.argv[1]):
         logging.basicConfig(level=logging.INFO)
         executor.start_polling(dp, skip_updates=True, on_shutdown=shutdown)
     else:

@@ -2,7 +2,7 @@ from raybot import config
 from raybot.model import db
 from raybot.actions.poi import print_poi_by_key
 from raybot.bot import bot
-from raybot.util import has_keyword
+from raybot.util import has_keyword, tr
 from aiogram import types
 from aiogram.utils.callback_data import CallbackData
 from aiogram.dispatcher.filters.state import State, StatesGroup
@@ -47,7 +47,7 @@ async def print_street(message, street):
         kbd = types.InlineKeyboardMarkup(row_width=5 if 1 <= len(buildings) % 6 <= 2 else 6)
         for house, hid in buildings.items():
             kbd.insert(types.InlineKeyboardButton(house, callback_data=HOUSE_CB.new(id=hid)))
-    await message.answer(f"Выберите дом по {street['name']}:", reply_markup=kbd)
+    await message.answer(tr('on_street', street['name']), reply_markup=kbd)
 
 
 async def handle_building(user: types.User, street, tokens, state, hid=None):
@@ -61,12 +61,12 @@ async def handle_building(user: types.User, street, tokens, state, hid=None):
         elif len(tokens) > 1:
             await print_apartment(user, hid, tokens[1])
         else:
-            await print_poi_by_key(user, hid, buttons=False,
-                                   comment='Пришлите номер квартиры, если хотите.')
+            await print_poi_by_key(user, hid, buttons=False, comment=tr('send_apt'))
     else:
         await AddrState.street.set()
         await state.set_data({'street': street['name']})
-        await bot.send_message(user.id, f'Нет дома {tokens[-1]} по {street["name"]}')
+        comment = tr('no_building', house=tokens[-1], street=street['name'])
+        await bot.send_message(user.id, comment)
     return hid
 
 
@@ -78,9 +78,7 @@ async def print_apartment(user: types.User, building: str, apartment):
     try:
         apartment = int(apartment)
     except ValueError:
-        await bot.send_message(
-            user.id,
-            f'Номер квартиры f{apartment} должен быть числом. Вот карточка для дома:')
+        await bot.send_message(user.id, tr('apt_number', apartment))
         await print_poi_by_key(user, building, buttons=False)
         return
 
@@ -105,9 +103,9 @@ async def print_apartment(user: types.User, building: str, apartment):
                 floor = None
 
     if entrance is None:
-        await print_poi_by_key(user, building, buttons=False)
+        comment = None
     elif floor is None:
-        await print_poi_by_key(user, entrance, f'Квартира {apartment}.', buttons=False)
+        comment = tr('apartment', apartment)
     else:
-        comment = f'Квартира {apartment} на {floor} этаже.'
-        await print_poi_by_key(user, entrance, comment, buttons=False)
+        comment = tr('floor', apt=apartment, floor=floor)
+    await print_poi_by_key(user, entrance, comment, buttons=False)
