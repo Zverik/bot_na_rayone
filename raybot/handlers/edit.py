@@ -186,44 +186,45 @@ def new_keyboard():
 async def print_edit_options(user: types.User, state: FSMContext, comment=None):
     poi = (await state.get_data())['poi']
     lines = []
+    m = tr(('editor', 'panel'))
     lines.append(f'<b>{format(poi.name)}</b>')
     lines.append('')
-    lines.append(f'/edesc <b>Описание:</b> {format(poi.description, null="нет")}')
-    lines.append(f'/ekey <b>Ключевые слова:</b> {format(poi.keywords)}')
-    lines.append(f'/etag <b>OSM-тег:</b> {format(poi.tag)}')
-    lines.append(f'/ehouse <b>Адрес:</b> {format(poi.house_name)}')
-    lines.append(f'/efloor <b>Этаж:</b> {format(poi.floor)}')
-    lines.append(f'/eaddr <b>Местонахождение:</b> {format(poi.address_part)}')
-    lines.append(f'/ehour <b>Часы работы:</b> {format(poi.hours_src)}')
-    lines.append('/eloc <b>Координаты:</b> '
+    lines.append(f'/edesc <b>{m["desc"]}:</b> {format(poi.description, null=m["none"])}')
+    lines.append(f'/ekey <b>{m["keywords"]}:</b> {format(poi.keywords)}')
+    lines.append(f'/etag <b>{m["tag"]}:</b> {format(poi.tag)}')
+    lines.append(f'/ehouse <b>{m["house"]}:</b> {format(poi.house_name)}')
+    lines.append(f'/efloor <b>{m["floor"]}:</b> {format(poi.floor)}')
+    lines.append(f'/eaddr <b>{m["addr"]}:</b> {format(poi.address_part)}')
+    lines.append(f'/ehour <b>{m["hours"]}:</b> {format(poi.hours_src)}')
+    lines.append(f'/eloc <b>{m["loc"]}:</b> '
                  '<a href="https://zverik.github.io/latlon/#18/'
                  f'{poi.location.lat}/{poi.location.lon}">'
-                 'смотреть</a>')
-    lines.append(f'/ephone <b>Телефоны:</b> {format("; ".join(poi.phones))}')
-    lines.append(f'/ewifi <b>Есть ли Wi-Fi:</b> {format(poi.has_wifi)}')
-    lines.append(f'/ecard <b>Оплата картой:</b> {format(poi.accepts_cards)}')
+                 f'{m["loc_browse"]}</a>')
+    lines.append(f'/ephone <b>{m["phone"]}:</b> {format("; ".join(poi.phones))}')
+    lines.append(f'/ewifi <b>{m["wifi"]}:</b> {format(poi.has_wifi)}')
+    lines.append(f'/ecard <b>{m["card"]}:</b> {format(poi.accepts_cards)}')
     if poi.links:
         links = ', '.join([f'<a href="{l[1]}">{h(l[0])}</a>' for l in poi.links])
     else:
-        links = '<i>нет</i>'
-    lines.append(f'/elink <b>Ссылки:</b> {links}')
-    lines.append(f'/ecom <b>Комментарий:</b> {format(poi.comment, null="нет")}')
+        links = f'<i>{m["none"]}</i>'
+    lines.append(f'/elink <b>{m["links"]}:</b> {links}')
+    lines.append(f'/ecom <b>{m["comment"]}:</b> {format(poi.comment, null=m["none"])}')
     if poi.photo_out and poi.photo_in:
-        photos = 'обе'
+        photos = m['photo_both']
     elif poi.photo_out:
-        photos = 'только вход'
+        photos = m['photo_out']
     elif poi.photo_in:
-        photos = 'только внутри'
+        photos = m['photo_in']
     else:
-        photos = 'нет'
-    lines.append(f'<b>Фотографии:</b> {photos} (залейте замену или /ephoto для просмотра, '
-                 '/eout для копирования фото снаружи)')
+        photos = m['none']
+    lines.append(f'<b>{m["photo"]}:</b> {photos} ({m["photo_comment"]})')
     if poi.id:
         if poi.delete_reason:
-            lines.append(f'<b>Удалено:</b> {format(poi.delete_reason)}. Восстановить: /undelete')
+            lines.append(f'<b>{m["deleted"]}:</b> {format(poi.delete_reason)}. '
+                         f'{m["restore"]}: /undelete')
         else:
-            lines.append('🗑️ Удалить: /delete')
-        lines.append('✉️ Написать модераторам: /msg')
+            lines.append(f'🗑️ {m["delete"]}: /delete')
+        lines.append(f'✉️ {m["msg"]}: /msg')
 
     content = '\n'.join(lines)
     if comment is None:

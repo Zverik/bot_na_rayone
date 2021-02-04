@@ -62,7 +62,7 @@ async def print_next_added(user: types.User):
 async def validate_poi(query: types.CallbackQuery, callback_data: Dict[str, str]):
     poi = await db.get_poi_by_id(int(callback_data['id']))
     if not poi:
-        await query.answer('POI пропал, странно.')
+        await query.answer(tr(('queue', 'poi_lost')))
         return
     await db.validate_poi(poi.id)
     await query.answer(tr(('queue', 'validated_ok')))
@@ -84,7 +84,7 @@ async def print_next_queued(user: types.User):
     q = queue[0]
     poi = await db.get_poi_by_id(q.poi_id)
     if not poi:
-        await bot.send_message(user.id, 'POI пропал, странно. Удаляю запись.')
+        await bot.send_message(user.id, tr(('queue', 'poi_lost_del')))
         await db.delete_queue(q)
         return True
 
@@ -95,10 +95,11 @@ async def print_next_queued(user: types.User):
     else:
         content = tr(('queue', 'field'), user=h(q.user_name), name=h(poi.name), field=q.field)
         content += '\n'
-        vold = '<i>ничего</i>' if q.old_value is None else h(q.old_value)
-        vnew = '<i>ничего</i>' if q.new_value is None else h(q.new_value)
-        content += f'\n<b>Сейчас:</b> {vold}'
-        content += f'\n<b>Будет:</b> {vnew}'
+        nothing = '<i>' + tr(('queue', 'nothing')) + '</i>'
+        vold = nothing if q.old_value is None else h(q.old_value)
+        vnew = nothing if q.new_value is None else h(q.new_value)
+        content += f'\n<b>{tr(("queue", "old"))}:</b> {vold}'
+        content += f'\n<b>{tr(("queue", "new"))}:</b> {vnew}'
         if q.field in ('photo_in', 'photo_out') and q.new_value:
             photo = os.path.join(config.PHOTOS, q.new_value + '.jpg')
             if not os.path.exists(photo):
@@ -135,7 +136,7 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
     action = callback_data['action']
     q = await db.get_queue_msg(int(callback_data['id']))
     if not q:
-        await query.answer('Пропало сообщение с таким номером')
+        await query.answer(tr(('queue', 'missing')))
         return
 
     if action == 'del':
@@ -147,13 +148,13 @@ async def process_queue(query: types.CallbackQuery, callback_data: Dict[str, str
     elif action == 'look':
         poi = await db.get_poi_by_id(q.poi_id)
         if not poi:
-            await query.answer('POI пропал, удаляю запись')
+            await query.answer(tr(('queue', 'poi_lost_del')))
             await db.delete_queue(q)
         else:
             await print_poi(query.from_user, poi, buttons=False)
             return
     else:
-        await query.answer(f'Что за действие в queue, "{action}"?')
+        await query.answer(f'Wrong queue action: "{action}"')
 
     await print_next_queued(query.from_user)
 
