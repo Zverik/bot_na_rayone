@@ -12,7 +12,7 @@ async def shutdown(dp):
     await db.close()
 
 
-if __name__ == '__main__':
+def main():
     if len(sys.argv) < 2 or os.path.isdir(sys.argv[1]):
         logging.basicConfig(level=logging.INFO)
         executor.start_polling(dp, skip_updates=True, on_shutdown=shutdown)
@@ -33,3 +33,7 @@ if __name__ == '__main__':
             print('photos — print missing and stray photos')
             print('missing — print pois with missing important keys')
             print('map — generate a map image')
+
+
+if __name__ == '__main__':
+    main()
