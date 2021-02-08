@@ -1,0 +1,24 @@
+---
+# Provided by @BotFather
+telegram_token: '1234567890:AAFEsdkjfhweiufheiufheirhufiuhfsdfs'
+
+# Integer user id: run bot once and check access.log for yours
+admin_id: 2345678912
+
+# Path to logs, must be writable by the bot
+logs: /var/log/raybot
+
+# Bounding box for an area where one can add a place
+# Use https://boundingbox.klokantech.com/ with "CSV" format
+bbox: [27.639915, 53.925492, 27.659763, 53.935321]
+
+# Set to true to make the POI database read-only
+maintenance: false
+
+# Which strings to use. Alternatively use strings.yml and tags.yml
+language: ru
+
+# Paths to writable files and directories, absolute or relative to the config file
+database: raybot.sqlite
+photos: photo
+tiles: tiles

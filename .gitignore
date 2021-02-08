@@ -1,8 +1,7 @@
 map/
 backup/
-config/
 photo*/
-config/
+/config/
 scripts/
 venv/
 __pycache__/
