@@ -164,18 +164,18 @@ async def add_mod(message: types.Message, state: FSMContext):
     if message.from_user.id != config.ADMIN:
         raise SkipHandler
     if not message.is_forward():
-        await message.answer('Форвардните пост от человека, чтобы сделать его модератором.')
+        await message.answer(tr(('admin', 'forward')))
         return
     await state.finish()
     me = await get_user(message.from_user)
     new_user = await get_user(message.forward_from)
     if new_user.is_moderator():
-        await message.answer('Он/она уже модератор.')
+        await message.answer(tr(('admin', 'mod_already')))
         return
     await db.add_user_to_role(new_user, 'moderator', me)
     forget_user(new_user.id)
-    await message.answer(f'Пользователь {new_user.name} теперь модератор.')
-    await bot.send_message(new_user.id, 'Вы теперь модератор. Попробуйте /queue и /admin.')
+    await message.answer(tr(('admin', 'mod_added'), new_user.name))
+    await bot.send_message(new_user.id, tr(('admin', 'mod_you')))
 
 
 @dp.callback_query_handler(MOD_REMOVE_CB.filter(), state=ModState.mod)
@@ -188,9 +188,9 @@ async def remove_mod(query: types.CallbackQuery, callback_data: Dict[str, str],
     if user_id != '-':
         await db.remove_user_from_role(int(user_id), 'moderator')
         forget_user(int(user_id))
-        await bot.send_message(query.from_user.id, 'Пользователь больше не модератор.')
+        await bot.send_message(query.from_user.id, tr(('admin', 'mod_removed')))
     else:
-        await query.answer('Ок')
+        await query.answer('Ok')
 
 
 async def manage_mods(user: types.User, state: FSMContext):
@@ -198,18 +198,16 @@ async def manage_mods(user: types.User, state: FSMContext):
     mods = await db.get_role_users('moderator')
     kbd = types.InlineKeyboardMarkup()
     if not mods:
-        content = ('Нет ни одного модератора. Форвардните пост от человека, '
-                   'чтобы сделать её/его модератором.')
+        content = tr(('admin', 'no_mods'))
     else:
-        content = 'Список модераторов:\n\n'
+        content = tr(('admin', 'mod_list')) + ':\n\n'
         for i, mod in enumerate(mods, 1):
             content += f'{i}. {mod.name}\n'
             kbd.insert(types.InlineKeyboardButton(
                 f'❌ {i} {mod.name}', callback_data=MOD_REMOVE_CB.new(id=str(mod.id))))
-        content += ('\nНажмите кнопку, чтобы удалить человека из модераторов, либо '
-                    'форвардните пост от нового человека, чтобы сделать её/его модератором.')
+        content += '\n' + tr(('admin', 'mod_help'))
     kbd.insert(types.InlineKeyboardButton(
-        'Оставить как есть', callback_data=MOD_REMOVE_CB.new(id='-')))
+        tr(('edit', 'cancel')), callback_data=MOD_REMOVE_CB.new(id='-')))
     await bot.send_message(user.id, content, reply_markup=kbd)
     await ModState.mod.set()
 
@@ -218,7 +216,7 @@ async def manage_mods(user: types.User, state: FSMContext):
 async def print_deleted(message: types.Message, state: FSMContext):
     pois = await db.get_last_deleted(6)
     if not pois:
-        await message.answer('Ничего не удалено.')
+        await message.answer(tr(('admin', 'no_deleted')))
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': 'deleted', 'poi': [p.id for p in pois]})
@@ -229,7 +227,7 @@ async def print_missing_value(user: types.User, k: str, state: FSMContext):
     pois = await db.poi_with_empty_value(k, buildings=k != 'house',
                                          entrances=k not in ('flor', 'keywords'))
     if not pois:
-        await bot.send_message(user.id, 'Нет таких.')
+        await bot.send_message(user.id, tr(('admin', 'no_such')))
         return
     await PoiState.poi_list.set()
     await state.set_data({'query': f'empty {k}', 'poi': [p.id for p in pois]})
@@ -237,21 +235,21 @@ async def print_missing_value(user: types.User, k: str, state: FSMContext):
 
 
 async def print_audit(user: types.User):
-    content = 'Последние операции:'
+    content = tr(('admin', 'audit')) + ':'
     last_audit = await db.get_last_audit(15)
     for a in last_audit:
         user_name = a.user_name if a.user_id == a.approved_by else str(a.user_id)
         if user_name is None:
-            user_name = 'Администратор'
+            user_name = tr(('admin', 'admin'))
         line = f'{a.ts.strftime("%Y-%m-%d %H:%S")} {user_name}'
         if a.approved_by != a.user_id:
-            line += f' (подтвердил {a.user_name})'
+            line += ' (' + tr(('admin', 'confirmed_by'), a.user_name) + ')'
         if a.field == 'poi':
-            line += ' создал' if not a.old_value else ' удалил'
+            line += ' ' + tr(('admin', 'created' if not a.old_value else 'deleted'))
             line += f' «{a.poi_name}» /poi{a.poi_id}'
         else:
-            line += (f' изменил у «{a.poi_name}» /poi{a.poi_id} '
-                     f'поле {a.field}: "{a.old_value}" → "{a.new_value}"')
+            line += (' ' + tr(('admin', 'modified')) + f' «{a.poi_name}» /poi{a.poi_id} ' +
+                     tr(('admin', 'field')) + f' {a.field}: "{a.old_value}" → "{a.new_value}"')
         content += '\n\n' + h(line) + '.'
     await bot.send_message(user.id, content, disable_web_page_preview=True)
 
@@ -354,14 +352,14 @@ async def upload_document(message: types.Message, state: FSMContext):
             if yaml:
                 doc = types.InputFile(yaml, filename='new_tags.yml')
                 await message.answer_document(
-                    doc, caption='Файл с новыми тегами. Добавьте их в config/tags.yml.')
+                    doc, caption=tr(('admin', 'tags_caption')))
                 yaml.close()
             await message.answer(
                 tr(('admin', 'up_csv')) + ' ' + tr(('admin', 'no_maintenance')))
         else:
-            raise ValueError('Непонятный тип файла')
+            raise ValueError(tr(('admin', 'unknown_file')))
     except Exception as e:
-        await message.answer(f'Ошибка: {e}. Попробуйте снова.')
+        await message.answer(tr(('admin', 'error'), e))
         return
     finally:
         tmp_dir.cleanup()
@@ -376,29 +374,33 @@ async def admin_info(message: types.Message):
         raise SkipHandler
     kbd = types.InlineKeyboardMarkup(row_width=2)
     if info.id == config.ADMIN:
-        kbd.insert(types.InlineKeyboardButton('Модераторы',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'mods')),
                                               callback_data=ADMIN_CB.new(action='mod')))
-        kbd.insert(types.InlineKeyboardButton('Дедубл. фото',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'dedup')),
                                               callback_data=ADMIN_CB.new(action='dedup')))
-        kbd.insert(types.InlineKeyboardButton('Подчистить фото',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'unused')),
                                               callback_data=ADMIN_CB.new(action='unused')))
-        kbd.insert(types.InlineKeyboardButton('База заведений...',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'base')),
                                               callback_data=ADMIN_CB.new(action='base')))
-    kbd.insert(types.InlineKeyboardButton('Аудит',
+    kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'audit')),
                                           callback_data=ADMIN_CB.new(action='audit')))
-    kbd.insert(types.InlineKeyboardButton('Перестроить индекс',
+    kbd.insert(types.InlineKeyboardButton(tr(('admin_menu', 'reindex')),
                                           callback_data=ADMIN_CB.new(action='reindex')))
     kbd.row(
-        types.InlineKeyboardButton('Нет адреса', callback_data=ADMIN_CB.new(action='mis-house')),
-        types.InlineKeyboardButton('Нет этажа', callback_data=ADMIN_CB.new(action='mis-floor')),
-        types.InlineKeyboardButton('Нет фото', callback_data=ADMIN_CB.new(action='mis-photo')),
+        types.InlineKeyboardButton(tr(('admin_menu', 'no_house')),
+                                   callback_data=ADMIN_CB.new(action='mis-house')),
+        types.InlineKeyboardButton(tr(('admin_menu', 'no_floor')),
+                                   callback_data=ADMIN_CB.new(action='mis-floor')),
+        types.InlineKeyboardButton(tr(('admin_menu', 'no_photo')),
+                                   callback_data=ADMIN_CB.new(action='mis-photo')),
     )
     kbd.row(
-        types.InlineKeyboardButton('Нет тега', callback_data=ADMIN_CB.new(action='mis-tag')),
-        types.InlineKeyboardButton('Нет ключ. слов',
+        types.InlineKeyboardButton(tr(('admin_menu', 'no_tag')),
+                                   callback_data=ADMIN_CB.new(action='mis-tag')),
+        types.InlineKeyboardButton(tr(('admin_menu', 'no_keywords')),
                                    callback_data=ADMIN_CB.new(action='mis-keywords')),
     )
-    await message.answer('Привет, модератор! Нажми что-нибудь.', reply_markup=kbd)
+    await message.answer(tr(('admin_menu', 'msg')), reply_markup=kbd)
 
 
 @dp.callback_query_handler(ADMIN_CB.filter(), state='*')
@@ -414,13 +416,13 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         return
     elif action == 'reindex':
         await db.reindex()
-        await bot.send_message(user.id, 'Поисковый индекс перестроен.')
+        await bot.send_message(user.id, tr(('admin_menu', 'reindexed')))
     elif action == 'dedup' and user.id == config.ADMIN:
         cnt = await dedup_photos()
-        await bot.send_message(query.from_user.id, f'Удалили {cnt} дубликатов фото.')
+        await bot.send_message(query.from_user.id, tr(('admin_menu', 'deduped'), cnt))
     elif action == 'unused' and user.id == config.ADMIN:
         cnt = await delete_unused_photos()
-        await bot.send_message(query.from_user.id, f'Удалили {cnt} неиспользованных фото.')
+        await bot.send_message(query.from_user.id, tr(('admin_menu', 'del_unused'), cnt))
     elif action == 'audit':
         await print_audit(user)
     elif action == 'mis-house':
@@ -436,19 +438,19 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
     elif action == 'base':
         # Print a submenu
         kbd = types.InlineKeyboardMarkup(row_width=2)
-        kbd.insert(types.InlineKeyboardButton('Скачать заведения',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_base', 'down_json')),
                                               callback_data=ADMIN_CB.new(action='down-json')))
-        kbd.insert(types.InlineKeyboardButton('Скачать теги',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_base', 'down_tags')),
                                               callback_data=ADMIN_CB.new(action='down-tags')))
-        kbd.insert(types.InlineKeyboardButton('Прислать файл',
+        kbd.insert(types.InlineKeyboardButton(tr(('admin_base', 'upload')),
                                               callback_data=ADMIN_CB.new(action='upload')))
         kbd.insert(types.InlineKeyboardButton(
-            'Заморозить базу' if not config.MAINTENANCE else 'Разморозить базу',
+            tr(('admin_base', 'freeze' if not config.MAINTENANCE else 'unfreeze')),
             callback_data=ADMIN_CB.new(action='maintenance')))
         await bot.edit_message_reply_markup(
             query.from_user.id, query.message.message_id, reply_markup=kbd)
     elif action == 'upload' and user.id == config.ADMIN:
-        await bot.send_message(query.from_user.id, 'Пришлите файл с GeoJSON или тегами.')
+        await bot.send_message(query.from_user.id, tr(('admin_base', 'send_file')))
         await ModState.admin_upload.set()
     elif action == 'down-json' and user.id == config.ADMIN:
         f = StringIO()
@@ -456,7 +458,7 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         f.seek(0)
         date = datetime.now().strftime('%y%m%d')
         doc = types.InputFile(f, filename=f'poi-{date}.geojson')
-        caption = tr(('admin', 'down_json')) + ' ' + tr(('admin', 'maintenance'))
+        caption = tr(('admin_base', 'down_json')) + ' ' + tr(('admin_base', 'maintenance'))
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
@@ -466,15 +468,15 @@ async def admin_command(query: types.CallbackQuery, callback_data: Dict[str, str
         f.seek(0)
         date = datetime.now().strftime('%y%m%d')
         doc = types.InputFile(f, filename=f'tags-{date}.csv')
-        caption = tr(('admin', 'down_tags')) + ' ' + tr(('admin', 'maintenance'))
+        caption = tr(('admin_base', 'down_tags')) + ' ' + tr(('admin_base', 'maintenance'))
         await bot.send_document(query.from_user.id, doc, caption=caption)
         config.MAINTENANCE = True
         f.close()
     elif action == 'maintenance' and user.id == config.ADMIN:
         config.MAINTENANCE = not config.MAINTENANCE
         if config.MAINTENANCE:
-            await query.answer(tr(('admin', 'maintenance')))
+            await query.answer(tr(('admin_base', 'maintenance')))
         else:
-            await query.answer(tr(('admin', 'no_maintenance')))
+            await query.answer(tr(('admin_base', 'no_maintenance')))
     else:
-        await query.answer(f'Неизвестный action: {action}')
+        await query.answer(tr(('admin_menu', 'wrong_action'), action))
