@@ -195,7 +195,7 @@ admin:
   field: поле
   tags_caption: Файл с новыми тегами. Добавьте их в config/tags.yml.
   unknown_file: Непонятный тип файла
-  error: Ошибка: %s. Попробуйте снова.
+  error: 'Ошибка: %s. Попробуйте снова.'
 
 admin_base:
   down_json: 'Воспользуйтесь редактором GeoJSON и потом нажмите «Прислать файл» и загрузите результат обратно. Редактор: https://zverik.github.io/point_ed/'
@@ -225,7 +225,7 @@ admin_menu:
   no_tag: Нет тега
   no_keywords: Нет ключ. слов
   msg: Привет, модератор! Нажми что-нибудь.
-  wrong_action: Неизвестный action: %s
+  wrong_action: 'Неизвестный action: %s'
   deduped: Удалили %s дубликатов фото.
   del_unused: Удалили %s неиспользованных фото.
 
