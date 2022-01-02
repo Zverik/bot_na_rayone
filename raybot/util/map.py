@@ -71,7 +71,7 @@ def build_basemap(minlon, minlat, maxlon, maxlat, gutter=100,
     Returns an image and a function (lon, lat) -> (x, y)."""
     zooms = get_zooms()
     if not zooms:
-        return None
+        return None, None
     zoom = (maxzoom or zooms[-1]) + 1
     tilesize = 256
     while zoom > zooms[0]:
@@ -89,7 +89,7 @@ def build_basemap(minlon, minlat, maxlon, maxlat, gutter=100,
     tymax = int(ymax + 1.0 * gutter / tilesize)
     image = merge_tiles(txmin, tymin, txmax, tymax, zoom)
     if not image:
-        return None
+        return None, None
 
     cxmin = int((xmin - txmin) * tilesize) - gutter
     cymin = int((ymin - tymin) * tilesize) - gutter
