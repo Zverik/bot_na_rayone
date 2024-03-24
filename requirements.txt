@@ -5,4 +5,4 @@ pillow
 astral==1.10.1
 lark-parser
 babel
--e git+git://github.com/Zverik/humanized_opening_hours.git#egg=osm-humanized-opening-hours
+osm-humanized-opening-hours @ git+https://github.com/Zverik/humanized_opening_hours.git@master
