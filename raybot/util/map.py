@@ -135,8 +135,7 @@ def get_map(coords: Sequence[Location], ref: Location = None):
     draw = ImageDraw.Draw(image)
     draw.text((5, image.height - 15), '© OpenStreetMap', fill='#0f0f0f', anchor='ls')
     # Beware of segfault! https://github.com/python-pillow/Pillow/issues/3066
-    font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'PTC75F.ttf'),
-                              20, layout_engine=ImageFont.LAYOUT_BASIC)
+    font = ImageFont.truetype(os.path.join(os.path.dirname(__file__), 'PTC75F.ttf'), 20)
     if len(coords) == 1:
         x, y = get_xy(coords[0].lon, coords[0].lat)
         marker = Image.open(os.path.join(os.path.dirname(__file__), 'marker-icon.png'))
